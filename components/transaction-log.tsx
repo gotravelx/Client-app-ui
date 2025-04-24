@@ -399,7 +399,7 @@ export function TransactionLog({ data, type }: TransactionLogProps) {
         <Table>
           <TableHeader className="bg-muted/50 sticky top-0">
             <TableRow>
-              <TableHead className="w-[180px]">Date & Time</TableHead>
+              <TableHead className="w-[180px]">Txn DTM</TableHead>
               {type === "transaction" ? (
                 <>
                   <TableHead>Transaction Hash</TableHead>
@@ -408,12 +408,23 @@ export function TransactionLog({ data, type }: TransactionLogProps) {
                 </>
               ) : (
                 <>
-                  <TableHead>Event</TableHead>
                   <TableHead>Flight</TableHead>
                   <TableHead>Carrier</TableHead>
-                  <TableHead>Departure</TableHead>
+                  <TableHead>Dep Airport</TableHead>
+                  <TableHead>Arr Airport</TableHead>
                   <TableHead>Arrival</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Flt Status</TableHead>
+                  <TableHead>Dep State</TableHead>
+                  <TableHead>Arr State</TableHead>
+                  <TableHead>Dep Gate</TableHead>
+                  <TableHead>Arr Gate</TableHead>
+                  <TableHead>Sch Dep DTM</TableHead>
+                  <TableHead>Sch Arr DTM</TableHead>
+                  <TableHead>Est Dep DTM</TableHead>
+                  <TableHead>Est Arr DTM</TableHead>
+                  <TableHead>Act Dep DTM</TableHead>
+                  <TableHead>Act Arr DTM</TableHead>
+                  <TableHead>Baggedg Claim</TableHead>
                 </>
               )}
               <TableHead className="text-right">Actions</TableHead>
