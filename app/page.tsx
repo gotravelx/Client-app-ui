@@ -1,6 +1,6 @@
-import { Navbar } from "@/components/navbar"
-import { Dashboard } from "@/components/dashboard"
-import { Toaster } from "@/components/ui/toaster"
+import { Navbar } from "@/components/navbar";
+import { Dashboard } from "@/components/dashboard";
+import { Toaster } from "@/components/ui/toaster";
 
 export default function Home() {
   return (
@@ -11,5 +11,5 @@ export default function Home() {
       </main>
       <Toaster />
     </div>
-  )
+  );
 }

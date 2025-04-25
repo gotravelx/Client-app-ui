@@ -569,7 +569,7 @@ export function TransactionLog({ data, type }: TransactionLogProps) {
                             <TabsContent value="raw">
                               <ScrollArea className="h-[400px] w-full rounded-md border">
                                 <pre className="bg-muted p-4 text-xs">
-                                  {JSON.stringify(item, null, 2)}
+                                  {/* {JSON.stringify(item, null, 2)} */}
                                 </pre>
                               </ScrollArea>
                             </TabsContent>

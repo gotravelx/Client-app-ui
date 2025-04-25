@@ -18,7 +18,6 @@ import { CONTRACT_ADDRESS, WS_PROVIDER_URL } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Bell, Plane } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { FlightDetails } from "@/components/flight-details";
 
 export function Dashboard() {
   const [provider, setProvider] = useState<ethers.WebSocketProvider | null>(
@@ -33,45 +32,6 @@ export function Dashboard() {
   const [activeTab, setActiveTab] = useState("combined");
   const { toast } = useToast();
 
-  // Load data from localStorage on initial render
-  useEffect(() => {
-    const savedEvents = localStorage.getItem("goTravelX_events");
-    const savedTransactions = localStorage.getItem("goTravelX_transactions");
-
-    if (savedEvents) {
-      try {
-        setEvents(JSON.parse(savedEvents));
-      } catch (e) {
-        console.error("Failed to parse saved events", e);
-      }
-    }
-
-    if (savedTransactions) {
-      try {
-        setTransactions(JSON.parse(savedTransactions));
-      } catch (e) {
-        console.error("Failed to parse saved transactions", e);
-      }
-    }
-  }, []);
-
-  // Save data to localStorage whenever it changes
-  useEffect(() => {
-    if (events.length > 0) {
-      localStorage.setItem("goTravelX_events", JSON.stringify(events));
-    }
-  }, [events]);
-
-  useEffect(() => {
-    if (transactions.length > 0) {
-      localStorage.setItem(
-        "goTravelX_transactions",
-        JSON.stringify(transactions)
-      );
-    }
-  }, [transactions]);
-
-  // Reset notification counters when tab changes
   useEffect(() => {
     if (activeTab === "transactions") {
       setNewTxCount(0);
@@ -102,6 +62,7 @@ export function Dashboard() {
             eventName: "FlightDataSet",
             timestamp: new Date().toISOString(),
           };
+          console.log("FlightDataSet event received:", newEvent);
           setEvents((prev) => [newEvent, ...prev]);
 
           // Show toast notification
@@ -118,12 +79,13 @@ export function Dashboard() {
             eventName: "FlightStatusUpdate",
             timestamp: new Date().toISOString(),
           };
+          console.log("FlightStatusUpdate event received:", newEvent);
           setEvents((prev) => [newEvent, ...prev]);
 
           // Show toast notification
           toast({
             title: "Flight Status Update",
-            description: `Flight ${event.args.flightNumber} status: ${event.args.FlightStatus}`,
+            description: `Flight ${event.args.flightNumber} status updated`,
           });
         });
 
@@ -134,6 +96,7 @@ export function Dashboard() {
         //     eventName: "UTCTimeSet",
         //     timestamp: new Date().toISOString(),
         //   };
+        //   console.log("UTCTimeSet event received:", newEvent);
         //   setEvents((prev) => [newEvent, ...prev]);
 
         //   // Show toast notification
@@ -150,6 +113,7 @@ export function Dashboard() {
             eventName: "SubscriptionDetails",
             timestamp: new Date().toISOString(),
           };
+          console.log("SubscriptionDetails event received:", newEvent);
           setEvents((prev) => [newEvent, ...prev]);
 
           // Show toast notification
@@ -168,7 +132,14 @@ export function Dashboard() {
               transaction &&
               transaction.to?.toLowerCase() === CONTRACT_ADDRESS.toLowerCase()
             ) {
-              setTransactions((prev) => [transaction, ...prev]);
+              console.log("Transaction detected:", transaction);
+              setTransactions((prev) => [
+                {
+                  ...transaction,
+                  timestamp: Math.floor(Date.now() / 1000),
+                },
+                ...prev,
+              ]);
 
               if (activeTab !== "transactions") {
                 setNewTxCount((prev) => prev + 1);
@@ -227,20 +198,17 @@ export function Dashboard() {
   };
 
   return (
-    <div className="container mx-auto p-4">
+    <div className="mx-auto px-3 p-4">
       <div className="flex flex-col space-y-4">
         <div className="flex items-center justify-between">
           <ConnectionStatus isConnected={isConnected} />
-          <div className="text-sm text-muted-foreground">
-            Monitoring flight status events in real-time
-          </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="combined" className="relative">
               <Plane className="mr-2 h-4 w-4" />
-              Event
+              Flight Data
             </TabsTrigger>
             <TabsTrigger value="transactions" className="relative">
               Transactions
@@ -256,22 +224,7 @@ export function Dashboard() {
           </TabsList>
 
           <TabsContent value="combined">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Flight Status Dashboard</CardTitle>
-                    <CardDescription>
-                      Comprehensive view of all flight data from the
-                      FlightStatusOracle contract
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <CombinedFlightTable events={events} />
-              </CardContent>
-            </Card>
+            <CombinedFlightTable events={events} />
           </TabsContent>
 
           <TabsContent value="transactions">

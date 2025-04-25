@@ -1,18 +1,20 @@
-import Link from "next/link"
-import { Plane } from "lucide-react"
-import { ThemeToggle } from "@/components/theme-toggle"
-import { CONTRACT_ADDRESS } from "@/lib/constants"
+import Link from "next/link";
+import { Plane } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { CONTRACT_ADDRESS } from "@/lib/constants";
 
 export function Navbar() {
   return (
     <div className="border-b">
-      <div className="flex h-16 items-center px-4 container mx-auto">
+      <div className="flex h-16 items-center  ">
         <div className="flex items-center gap-2 mr-4">
           <Plane className="h-6 w-6 text-primary" />
           <Link href="/" className="flex items-center">
             <span className="text-xl font-bold">GoTravelX</span>
           </Link>
-          <span className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-md">Client-realtime-app</span>
+          <span className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-md">
+            Client-realtime-app
+          </span>
         </div>
 
         <div className="ml-auto flex items-center space-x-4">
@@ -24,12 +26,13 @@ export function Navbar() {
               rel="noopener noreferrer"
               className="text-primary hover:underline font-mono"
             >
-              {CONTRACT_ADDRESS.substring(0, 6)}...{CONTRACT_ADDRESS.substring(CONTRACT_ADDRESS.length - 4)}
+              {CONTRACT_ADDRESS.substring(0, 6)}...
+              {CONTRACT_ADDRESS.substring(CONTRACT_ADDRESS.length - 4)}
             </a>
           </div>
           <ThemeToggle />
         </div>
       </div>
     </div>
-  )
+  );
 }

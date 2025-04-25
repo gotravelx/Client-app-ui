@@ -9,26 +9,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Eye,
-  Plane,
-  ArrowRight,
-  Lock,
-  Unlock,
-  AlertCircle,
-} from "lucide-react";
-
+import { BadgeCheckIcon, BaggageClaim, Lock, Unlock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getBaseUrl } from "@/utils/base_url";
 
@@ -36,10 +19,9 @@ interface CombinedFlightTableProps {
   events: Array<{ [key: string]: any }>;
 }
 
-type FlightKey = string; // Format: "flightNumber-carrierCode-departureDate"
-type CombinedFlightData = {
-  key: FlightKey;
-  lastUpdated: string;
+type FlightData = {
+  eventId: string; // Unique identifier for each event
+  timestamp: string; // Event timestamp
   flightNumber: string;
   carrierCode: string;
   scheduledDepartureDate: string;
@@ -71,7 +53,7 @@ type CombinedFlightData = {
   offUtc: string;
   onUtc: string;
   inUtc: string;
-  // Raw events for reference
+  // Raw event for reference
   events: any[];
   // Encrypted data tracking
   encryptedData: Record<string, string[]>;
@@ -90,217 +72,233 @@ const isLikelyEncrypted = (str: string): boolean => {
   return encryptionPattern.test(str) || encryptionPatternExtended.test(str);
 };
 
+// Function to get color for flight status
+const getFlightStatusColor = (status: string): string => {
+  if (!status) return "bg-gray-200 text-gray-700";
+
+  const statusLower = status.toLowerCase();
+
+  if (statusLower.includes("not departed") || statusLower === "ndpt")
+    return "bg-blue-100 text-blue-800";
+  if (statusLower.includes("departed") || statusLower === "out")
+    return "bg-indigo-100 text-indigo-800";
+  if (statusLower.includes("in flight") || statusLower === "off")
+    return "bg-purple-100 text-purple-800";
+  if (statusLower.includes("landed") || statusLower === "on")
+    return "bg-amber-100 text-amber-800";
+  if (statusLower.includes("arrived") || statusLower === "in")
+    return "bg-green-100 text-green-800";
+  if (statusLower.includes("cancel")) return "bg-red-100 text-red-800";
+  if (statusLower.includes("delay")) return "bg-orange-100 text-orange-800";
+
+  return "bg-gray-100 text-gray-800";
+};
+
+// Function to map status codes to human-readable text
+const mapStatusCodeToText = (code: string): string => {
+  const statusMap: Record<string, string> = {
+    NDPT: "Not Departed",
+    OUT: "Departed",
+    OFF: "In Flight",
+    ON: "Landed",
+    IN: "Arrived",
+  };
+
+  return statusMap[code] || code;
+};
+
 export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
-  const [combinedData, setCombinedData] = useState<CombinedFlightData[]>([]);
-  const [selectedFlight, setSelectedFlight] =
-    useState<CombinedFlightData | null>(null);
+  const [flightEvents, setFlightEvents] = useState<FlightData[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
 
-  useEffect(() => {
-    // Process and combine events
-    const flightMap = new Map<FlightKey, CombinedFlightData>();
+  // Process events by consolidating them based on flight number, carrier code and timestamp
+  const processEvents = () => {
+    // Group events by timestamp, flight number and carrier code
+    const flightEventMap = new Map<string, FlightData>();
 
-    events.forEach((event) => {
-      if (!event.args) return;
+    events.forEach((event, index) => {
+      if (!event.args || !event.args.flightNumber || !event.args.carrierCode)
+        return;
 
-      // Create a unique key for each flight
-      const flightNumber = event.args.flightNumber || "";
-      const carrierCode = event.args.carrierCode || "";
-      const scheduledDepartureDate = event.args.scheduledDepartureDate || "";
+      const timestamp = event.timestamp || new Date().toISOString();
+      const flightNumber = event.args.flightNumber;
+      const carrierCode = event.args.carrierCode;
 
-      if (!flightNumber || !carrierCode) return;
+      // Create a key combining these elements
+      const flightKey = `${
+        timestamp.split(".")[0]
+      }-${flightNumber}-${carrierCode}`;
 
-      const key = `${flightNumber}-${carrierCode}-${scheduledDepartureDate}`;
+      // Get existing flight data or create new
+      const existingFlight = flightEventMap.get(flightKey);
 
-      // Get existing data or create new entry
-      const flightData = flightMap.get(key) || {
-        key,
-        lastUpdated: event.timestamp || new Date().toISOString(),
-        flightNumber,
-        carrierCode,
-        scheduledDepartureDate,
-        departureCity: "",
-        arrivalCity: "",
-        departureAirport: "",
-        arrivalAirport: "",
-        departureGate: "",
-        arrivalGate: "",
-        operatingAirlineCode: "",
-        equipmentModel: "",
-        flightStatus: "",
-        flightStatusCode: "",
-        currentFlightStatusTime: "",
-        departureStatus: "",
-        arrivalStatus: "",
-        baggageClaim: "",
+      // Initialize flight data
+      const flightData: FlightData = existingFlight || {
+        eventId: flightKey,
+        timestamp: timestamp,
+        flightNumber: flightNumber,
+        carrierCode: carrierCode,
+        scheduledDepartureDate: event.args.scheduledDepartureDate || "",
+        departureCity: event.args.departureCity || "",
+        arrivalCity: event.args.arrivalCity || "",
+        departureAirport: event.args.departureAirport || "",
+        arrivalAirport: event.args.arrivalAirport || "",
+        departureGate: event.args.departureGate || "",
+        arrivalGate: event.args.arrivalGate || "",
+        operatingAirlineCode: event.args.operatingAirlineCode || "",
+        equipmentModel: event.args.equipmentModel || "",
+        flightStatus:
+          event.args.CurrentFlightStatus || event.args.FlightStatus || "",
+        flightStatusCode: event.args.FlightStatusCode || "",
+        currentFlightStatusTime: event.args.currentFlightStatusTime || "",
+        departureStatus: event.args.DepartureStatus || "",
+        arrivalStatus: event.args.ArrivalStatus || "",
+        baggageClaim: event.args.baggageClaim || "",
         scheduledDepartureUTC: "",
         scheduledArrivalUTC: "",
         estimatedDepartureUTC: "",
         estimatedArrivalUTC: "",
         actualDepartureUTC: "",
         actualArrivalUTC: "",
-        departureDelayMinutes: "",
-        arrivalDelayMinutes: "",
-        outUtc: "",
-        offUtc: "",
-        onUtc: "",
-        inUtc: "",
-        events: [] as Array<{ [key: string]: any }>,
+        departureDelayMinutes: event.args.departureDelayMinutes || "",
+        arrivalDelayMinutes: event.args.arrivalDelayMinutes || "",
+        outUtc: event.args.outUtc || "",
+        offUtc: event.args.offUtc || "",
+        onUtc: event.args.onUtc || "",
+        inUtc: event.args.inUtc || "",
+        events: [],
         encryptedData: {},
         decryptedData: {},
         isDecrypting: false,
       };
 
-      // Update the last updated timestamp
-      if (
-        event.timestamp &&
-        new Date(event.timestamp) > new Date(flightData.lastUpdated)
-      ) {
-        flightData.lastUpdated = event.timestamp;
+      // Merge data if we already have an entry
+      if (existingFlight) {
+        // Only update fields that are empty in the existing entry but have data in the new event
+        if (!existingFlight.departureCity && event.args.departureCity)
+          flightData.departureCity = event.args.departureCity;
+
+        if (!existingFlight.arrivalCity && event.args.arrivalCity)
+          flightData.arrivalCity = event.args.arrivalCity;
+
+        if (!existingFlight.departureAirport && event.args.departureAirport)
+          flightData.departureAirport = event.args.departureAirport;
+
+        if (!existingFlight.arrivalAirport && event.args.arrivalAirport)
+          flightData.arrivalAirport = event.args.arrivalAirport;
+
+        if (
+          !existingFlight.flightStatus &&
+          (event.args.CurrentFlightStatus || event.args.FlightStatus)
+        )
+          flightData.flightStatus =
+            event.args.CurrentFlightStatus || event.args.FlightStatus;
+
+        if (!existingFlight.flightStatusCode && event.args.FlightStatusCode)
+          flightData.flightStatusCode = event.args.FlightStatusCode;
+
+        // Update other fields similarly
       }
 
-      // Add this event to the flight's event list
-      flightData.events.push(event);
+      // Process UTC times if available
+      if (event.args.utcTimes) {
+        if (
+          !flightData.scheduledDepartureUTC &&
+          event.args.utcTimes.scheduledDepartureUTC
+        )
+          flightData.scheduledDepartureUTC =
+            event.args.utcTimes.scheduledDepartureUTC;
+
+        if (
+          !flightData.scheduledArrivalUTC &&
+          event.args.utcTimes.scheduledArrivalUTC
+        )
+          flightData.scheduledArrivalUTC =
+            event.args.utcTimes.scheduledArrivalUTC;
+
+        if (
+          !flightData.estimatedDepartureUTC &&
+          event.args.utcTimes.estimatedDepartureUTC
+        )
+          flightData.estimatedDepartureUTC =
+            event.args.utcTimes.estimatedDepartureUTC;
+
+        if (
+          !flightData.estimatedArrivalUTC &&
+          event.args.utcTimes.estimatedArrivalUTC
+        )
+          flightData.estimatedArrivalUTC =
+            event.args.utcTimes.estimatedArrivalUTC;
+
+        if (
+          !flightData.actualDepartureUTC &&
+          event.args.utcTimes.actualDepartureUTC
+        )
+          flightData.actualDepartureUTC =
+            event.args.utcTimes.actualDepartureUTC;
+
+        if (
+          !flightData.actualArrivalUTC &&
+          event.args.utcTimes.actualArrivalUTC
+        )
+          flightData.actualArrivalUTC = event.args.utcTimes.actualArrivalUTC;
+      }
+
+      // Direct UTC time assignments
+      if (!flightData.scheduledDepartureUTC && event.args.scheduledDepartureUTC)
+        flightData.scheduledDepartureUTC = event.args.scheduledDepartureUTC;
+
+      if (!flightData.scheduledArrivalUTC && event.args.scheduledArrivalUTC)
+        flightData.scheduledArrivalUTC = event.args.scheduledArrivalUTC;
+
+      if (!flightData.estimatedDepartureUTC && event.args.estimatedDepartureUTC)
+        flightData.estimatedDepartureUTC = event.args.estimatedDepartureUTC;
+
+      if (!flightData.estimatedArrivalUTC && event.args.estimatedArrivalUTC)
+        flightData.estimatedArrivalUTC = event.args.estimatedArrivalUTC;
+
+      if (!flightData.actualDepartureUTC && event.args.actualDepartureUTC)
+        flightData.actualDepartureUTC = event.args.actualDepartureUTC;
+
+      if (!flightData.actualArrivalUTC && event.args.actualArrivalUTC)
+        flightData.actualArrivalUTC = event.args.actualArrivalUTC;
 
       // Check for encrypted data in this event
       if (event.args) {
         Object.entries(event.args).forEach(([key, value]) => {
           if (typeof value === "string" && isLikelyEncrypted(value)) {
-            if (
-              !flightData.encryptedData[
-                key as keyof typeof flightData.encryptedData
-              ]
-            ) {
-              (flightData.encryptedData as Record<string, string[]>)[key] = [];
+            if (!flightData.encryptedData[key]) {
+              flightData.encryptedData[key] = [];
             }
-            if (
-              !(flightData.encryptedData as Record<string, string[]>)[
-                key
-              ].includes(value as string)
-            ) {
-              (flightData.encryptedData as Record<string, string[]>)[key].push(
-                value as string
-              );
+            if (!flightData.encryptedData[key].includes(value as string)) {
+              flightData.encryptedData[key].push(value as string);
             }
           }
         });
       }
 
-      // Update data based on event type
-      if (event.eventName === "FlightDataSet") {
-        // Update flight details
-        flightData.departureCity =
-          event.args.departureCity || flightData.departureCity;
-        flightData.arrivalCity =
-          event.args.arrivalCity || flightData.arrivalCity;
-        flightData.departureAirport =
-          event.args.departureAirport || flightData.departureAirport;
-        flightData.arrivalAirport =
-          event.args.arrivalAirport || flightData.arrivalAirport;
-        flightData.departureGate =
-          event.args.departureGate || flightData.departureGate;
-        flightData.arrivalGate =
-          event.args.arrivalGate || flightData.arrivalGate;
-        flightData.operatingAirlineCode =
-          event.args.operatingAirlineCode || flightData.operatingAirlineCode;
-        flightData.equipmentModel =
-          event.args.equipmentModel || flightData.equipmentModel;
-        flightData.flightStatus =
-          event.args.CurrentFlightStatus || flightData.flightStatus;
+      // Add this event to the flight's events array
+      flightData.events.push(event);
 
-        // Update UTC times if available
-        if (event.args.utcTimes) {
-          flightData.scheduledDepartureUTC =
-            event.args.utcTimes.scheduledDepartureUTC ||
-            flightData.scheduledDepartureUTC;
-          flightData.scheduledArrivalUTC =
-            event.args.utcTimes.scheduledArrivalUTC ||
-            flightData.scheduledArrivalUTC;
-          flightData.estimatedDepartureUTC =
-            event.args.utcTimes.estimatedDepartureUTC ||
-            flightData.estimatedDepartureUTC;
-          flightData.estimatedArrivalUTC =
-            event.args.utcTimes.estimatedArrivalUTC ||
-            flightData.estimatedArrivalUTC;
-          flightData.actualDepartureUTC =
-            event.args.utcTimes.actualDepartureUTC ||
-            flightData.actualDepartureUTC;
-          flightData.actualArrivalUTC =
-            event.args.utcTimes.actualArrivalUTC || flightData.actualArrivalUTC;
-        }
-      } else if (
-        event.eventName === "currentFlightStatus" ||
-        event.eventName === "FlightStatusUpdate"
-      ) {
-        // Update flight status
-        flightData.flightStatus =
-          event.args.FlightStatus || flightData.flightStatus;
-        flightData.flightStatusCode =
-          event.args.FlightStatusCode || flightData.flightStatusCode;
-        flightData.currentFlightStatusTime =
-          event.args.currentFlightStatusTime ||
-          flightData.currentFlightStatusTime;
-      } else if (event.eventName === "UTCTimeSet") {
-        // Update UTC times
-        flightData.scheduledDepartureUTC =
-          event.args.scheduledDepartureUTC || flightData.scheduledDepartureUTC;
-        flightData.scheduledArrivalUTC =
-          event.args.scheduledArrivalUTC || flightData.scheduledArrivalUTC;
-        flightData.estimatedDepartureUTC =
-          event.args.estimatedDepartureUTC || flightData.estimatedDepartureUTC;
-        flightData.estimatedArrivalUTC =
-          event.args.estimatedArrivalUTC || flightData.estimatedArrivalUTC;
-        flightData.actualDepartureUTC =
-          event.args.actualDepartureUTC || flightData.actualDepartureUTC;
-        flightData.actualArrivalUTC =
-          event.args.actualArrivalUTC || flightData.actualArrivalUTC;
-        flightData.departureDelayMinutes =
-          event.args.departureDelayMinutes || flightData.departureDelayMinutes;
-        flightData.arrivalDelayMinutes =
-          event.args.arrivalDelayMinutes || flightData.arrivalDelayMinutes;
-        flightData.baggageClaim =
-          event.args.baggageClaim || flightData.baggageClaim;
-      }
-
-      // Update flight timeline data if available
-      if (event.args.outUtc) flightData.outUtc = event.args.outUtc;
-      if (event.args.offUtc) flightData.offUtc = event.args.offUtc;
-      if (event.args.onUtc) flightData.onUtc = event.args.onUtc;
-      if (event.args.inUtc) flightData.inUtc = event.args.inUtc;
-
-      // Update departure and arrival status if available
-      if (event.args.DepartureStatus)
-        flightData.departureStatus = event.args.DepartureStatus;
-      if (event.args.ArrivalStatus)
-        flightData.arrivalStatus = event.args.ArrivalStatus;
-
-      // Update the map
-      flightMap.set(key, flightData);
+      // Store the updated flight data
+      flightEventMap.set(flightKey, flightData);
     });
 
-    // Convert map to array and sort by last updated
-    const sortedData = Array.from(flightMap.values()).sort((a, b) => {
-      return (
-        new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
-      );
+    // Convert map to array and sort by timestamp (newest first)
+    const sortedData = Array.from(flightEventMap.values()).sort((a, b) => {
+      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
     });
 
-    setCombinedData(sortedData);
-  }, [events]);
-
-  const getStatusBadgeVariant = (status: string) => {
-    if (!status) return "outline";
-
-    status = status.toLowerCase();
-    if (status.includes("cancel")) return "destructive";
-    if (status.includes("landed") || status.includes("arrived"))
-      return "default";
-    if (status.includes("delayed")) return "secondary";
-    return "outline";
+    setFlightEvents(sortedData);
   };
 
-  const filteredData = combinedData.filter((flight) => {
+  // Process events when they change
+  useEffect(() => {
+    processEvents();
+  }, [events]);
+
+  const filteredData = flightEvents.filter((flight) => {
     if (!searchTerm) return true;
 
     const searchLower = searchTerm.toLowerCase();
@@ -315,32 +313,48 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
     );
   });
 
-  const decryptFlightData = async (flight: CombinedFlightData) => {
+  const decryptFlightData = async (flight: FlightData) => {
     if (
       !flight.encryptedData ||
       Object.keys(flight.encryptedData).length === 0
     ) {
       toast({
         title: "No encrypted data",
-        description: "This flight doesn't have any encrypted data to decrypt.",
+        description:
+          "This flight event doesn't have any encrypted data to decrypt.",
       });
       return;
     }
 
     // Update the flight to show it's decrypting
-    setCombinedData((prev) =>
-      prev.map((f) => (f.key === flight.key ? { ...f, isDecrypting: true } : f))
+    setFlightEvents((prev) =>
+      prev.map((f) =>
+        f.eventId === flight.eventId ? { ...f, isDecrypting: true } : f
+      )
     );
 
     try {
       // Collect all encrypted values into a single array
       const allEncryptedValues: string[] = [];
+      Object.entries(flight).forEach(([field, value]) => {
+        if (typeof value === "string" && isLikelyEncrypted(value)) {
+          if (!allEncryptedValues.includes(value)) {
+            allEncryptedValues.push(value);
+          }
+        }
+      });
+
+      // Also check the encryptedData object
       Object.values(flight.encryptedData).forEach((values) => {
         values.forEach((value) => {
           if (!allEncryptedValues.includes(value)) {
             allEncryptedValues.push(value);
           }
         });
+      });
+
+      console.log("Calling decryption API with:", {
+        encryptedData: allEncryptedValues,
       });
 
       // Call the API to decrypt the data
@@ -362,6 +376,7 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
       }
 
       const data = await response.json();
+      console.log("Decryption API response:", data);
 
       // Create a mapping of encrypted to decrypted values
       const decryptionMap: Record<string, string> = {};
@@ -371,38 +386,63 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
         }
       });
 
-      // Update the flight with decrypted data
-      setCombinedData((prev) =>
-        prev.map((f) => {
-          if (f.key === flight.key) {
-            const updatedDecryptedData: Record<string, string[]> = {};
+      console.log("Decryption map:", decryptionMap);
 
-            // For each field with encrypted data
-            Object.entries(f.encryptedData).forEach(
-              ([field, encryptedValues]) => {
-                updatedDecryptedData[field] = encryptedValues.map(
-                  (encrypted) => decryptionMap[encrypted] || encrypted
-                );
+      // Create a new flight object with decrypted data
+      const updatedFlight = { ...flight };
+      const updatedDecryptedData = { ...flight.decryptedData };
 
-                // Also update the actual field with the decrypted value if applicable
-                if (
-                  encryptedValues.length === 1 &&
-                  decryptionMap[encryptedValues[0]]
-                ) {
-                  // @ts-ignore - Dynamic field access
-                  f[field] = decryptionMap[encryptedValues[0]];
-                }
-              }
-            );
+      // Check all fields for encrypted data and update them
+      Object.keys(updatedFlight).forEach((field) => {
+        // Skip non-string fields or special fields
+        if (
+          field === "events" ||
+          field === "encryptedData" ||
+          field === "decryptedData" ||
+          field === "isDecrypting" ||
+          field === "eventId"
+        )
+          return;
 
-            return {
-              ...f,
-              decryptedData: updatedDecryptedData,
-              isDecrypting: false,
-            };
+        const value = updatedFlight[field as keyof FlightData];
+        if (typeof value === "string" && isLikelyEncrypted(value)) {
+          const decrypted = decryptionMap[value];
+          if (decrypted) {
+            // Update the field with decrypted value
+            (updatedFlight as any)[field] = decrypted;
+
+            // Also store in decrypted data map
+            if (!updatedDecryptedData[field]) {
+              updatedDecryptedData[field] = [];
+            }
+            updatedDecryptedData[field][0] = decrypted;
           }
-          return f;
-        })
+        }
+      });
+
+      // Also process any encrypted values in the encryptedData map
+      Object.entries(flight.encryptedData).forEach(
+        ([field, encryptedValues]) => {
+          if (!updatedDecryptedData[field]) {
+            updatedDecryptedData[field] = [];
+          }
+
+          encryptedValues.forEach((encrypted, idx) => {
+            const decrypted = decryptionMap[encrypted];
+            if (decrypted) {
+              updatedDecryptedData[field][idx] = decrypted;
+            }
+          });
+        }
+      );
+
+      // Update the flight with all decrypted data
+      updatedFlight.decryptedData = updatedDecryptedData;
+      updatedFlight.isDecrypting = false;
+
+      // Update the state with the new flight data
+      setFlightEvents((prev) =>
+        prev.map((f) => (f.eventId === flight.eventId ? updatedFlight : f))
       );
 
       toast({
@@ -411,14 +451,6 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
           Object.keys(decryptionMap).length
         } values.`,
       });
-
-      // If this is the selected flight, update it
-      if (selectedFlight && selectedFlight.key === flight.key) {
-        const updatedFlight = combinedData.find((f) => f.key === flight.key);
-        if (updatedFlight) {
-          setSelectedFlight(updatedFlight);
-        }
-      }
     } catch (error) {
       console.error("Error decrypting data:", error);
       toast({
@@ -428,40 +460,75 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
       });
 
       // Reset the decrypting state
-      setCombinedData((prev) =>
+      setFlightEvents((prev) =>
         prev.map((f) =>
-          f.key === flight.key ? { ...f, isDecrypting: false } : f
+          f.eventId === flight.eventId ? { ...f, isDecrypting: false } : f
         )
       );
     }
   };
 
-  const hasEncryptedData = (flight: CombinedFlightData) => {
+  const hasEncryptedData = (flight: FlightData) => {
+    // Check all fields for encrypted data
+    for (const [field, value] of Object.entries(flight)) {
+      if (
+        typeof value === "string" &&
+        isLikelyEncrypted(value) &&
+        field !== "events" &&
+        field !== "encryptedData" &&
+        field !== "decryptedData" &&
+        field !== "isDecrypting" &&
+        field !== "eventId"
+      ) {
+        return true;
+      }
+    }
     return Object.keys(flight.encryptedData).length > 0;
   };
 
-  // Modify the renderCellValue function to handle all fields consistently
-  const renderCellValue = (
-    flight: CombinedFlightData,
-    field: keyof CombinedFlightData
-  ) => {
+  // Render a cell value, handling encrypted data
+  const renderCellValue = (flight: FlightData, field: keyof FlightData) => {
     const value = flight[field] as string;
 
     if (!value) return "TBD";
 
-    // Check if this value is encrypted (regardless of whether it's tracked in encryptedData)
+    // Check if this value is encrypted
     if (isLikelyEncrypted(value)) {
       // If we have decrypted this field
       if (flight.decryptedData[field] && flight.decryptedData[field][0]) {
+        const decryptedValue = flight.decryptedData[field][0];
+
+        // For status fields, apply special formatting
+        if (
+          field === "flightStatus" ||
+          field === "departureStatus" ||
+          field === "arrivalStatus" ||
+          field === "flightStatusCode"
+        ) {
+          const displayValue = mapStatusCodeToText(decryptedValue);
+          const colorClass = getFlightStatusColor(decryptedValue);
+
+          return (
+            <div className="flex items-center gap-1">
+              <Unlock className="h-3 w-3 text-green-500" />
+              <span
+                className={`px-2 py-1 rounded-md text-xs font-medium ${colorClass}`}
+              >
+                {displayValue}
+              </span>
+            </div>
+          );
+        }
+
         return (
           <div className="flex items-center gap-1">
             <Unlock className="h-3 w-3 text-green-500" />
-            <span>{flight.decryptedData[field][0]}</span>
+            <span>{decryptedValue}</span>
           </div>
         );
       }
 
-      // If it's still encrypted, just show "Encrypted" instead of the raw value
+      // If it's still encrypted
       return (
         <div className="flex items-center gap-1">
           <Lock className="h-3 w-3 text-amber-500" />
@@ -470,135 +537,191 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
       );
     }
 
+    // For non-encrypted status fields, apply special formatting
+    if (
+      field === "flightStatus" ||
+      field === "departureStatus" ||
+      field === "arrivalStatus"
+    ) {
+      const displayValue = mapStatusCodeToText(value);
+      const colorClass = getFlightStatusColor(value);
+
+      return (
+        <span
+          className={`px-2 py-1 rounded-md text-xs font-medium ${colorClass}`}
+        >
+          {displayValue}
+        </span>
+      );
+    }
+
     return value;
   };
 
   return (
-    <ScrollArea className="h-[600px] w-full rounded-md border">
-      <Table>
-        <TableHeader className="bg-muted/50 sticky top-0 z-10">
-          <TableRow>
-            <TableHead className="w-[100px]">Flt Nbr</TableHead>
-            <TableHead>Carrier</TableHead>
-            <TableHead>Dep Stn</TableHead>
-            <TableHead>Arr Stn</TableHead>
-            <TableHead>Flt Status</TableHead>
-            <TableHead>Dep State</TableHead>
-            <TableHead>Arr State</TableHead>
-            <TableHead>Sch Dep</TableHead>
-            <TableHead>Sch Arr</TableHead>
-            <TableHead>Est Dep</TableHead>
-            <TableHead>Est Arr</TableHead>
-            <TableHead>Act Dep</TableHead>
-            <TableHead>Act Arr</TableHead>
-            <TableHead>Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {filteredData.map((flight, index) => (
-            <TableRow
-              key={flight.key}
-              className={index % 2 === 0 ? "bg-muted/20 overflow-x-auto" : ""}
-            >
-              <TableCell className="font-medium">
-                {flight.flightNumber}
-              </TableCell>
-              <TableCell>
-                {isLikelyEncrypted(flight?.carrierCode) ? (
-                  <div className="flex items-center gap-1">
-                    <Lock className="h-3 w-3 text-amber-500" />
-                    <span className="text-xs">Encrypted</span>
-                  </div>
-                ) : (
-                  <span>{flight.carrierCode}</span>
-                )}
-              </TableCell>
-              <TableCell>
-                <div className="flex flex-col">
-                  {isLikelyEncrypted(flight.departureAirport) ? (
-                    <div className="flex items-center gap-1">
-                      <Lock className="h-3 w-3 text-amber-500" />
-                      <span className="text-xs">Encrypted</span>
-                    </div>
-                  ) : (
-                    <span>{flight.departureAirport}</span>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell>
-                <div className="flex flex-col">
-                  {isLikelyEncrypted(flight.arrivalAirport) ? (
-                    <div className="flex items-center gap-1">
-                      <Lock className="h-3 w-3 text-amber-500" />
-                      <span className="text-xs">Encrypted</span>
-                    </div>
-                  ) : (
-                    <span>{flight.arrivalAirport}</span>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell>
-                {isLikelyEncrypted(flight.flightStatus) ? (
-                  <div className="flex items-center gap-1">
-                    <Lock className="h-3 w-3 text-amber-500" />
-                    <span className="text-xs">Encrypted</span>
-                  </div>
-                ) : (
-                  <Badge variant={getStatusBadgeVariant(flight.flightStatus)}>
-                    {flight.flightStatus || "Unknown"}
-                  </Badge>
-                )}
-              </TableCell>
-              <TableCell>
-                {renderCellValue(flight, "departureStatus")}
-              </TableCell>
-              <TableCell>{renderCellValue(flight, "arrivalStatus")}</TableCell>
-              <TableCell>
-                {renderCellValue(flight, "scheduledDepartureUTC")}
-              </TableCell>
-              <TableCell>
-                {renderCellValue(flight, "scheduledArrivalUTC")}
-              </TableCell>
-              <TableCell>
-                {renderCellValue(flight, "estimatedDepartureUTC")}
-              </TableCell>
-              <TableCell>
-                {renderCellValue(flight, "estimatedArrivalUTC")}
-              </TableCell>
-              <TableCell>
-                {renderCellValue(flight, "actualDepartureUTC")}
-              </TableCell>
-              <TableCell>
-                {renderCellValue(flight, "actualArrivalUTC")}
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-2">
-                  {hasEncryptedData(flight) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => decryptFlightData(flight)}
-                      disabled={flight.isDecrypting}
-                    >
-                      {flight.isDecrypting ? (
-                        <div className="flex items-center">
-                          <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent mr-1"></div>
-                          <span>Decrypting</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center">
-                          <Unlock className="h-3 w-3 mr-1" />
-                          <span>Decrypt</span>
-                        </div>
+    <div className="space-y-4">
+      <style jsx global>{`
+        .flight-table-header {
+          background-color: black;
+          color: white;
+        }
+
+        .flight-table-header th {
+          white-space: nowrap;
+          background-color: black;
+          color: white;
+          text-align: left;
+          font-weight: 600;
+        }
+
+        .flight-table-row td {
+          text-align: left;
+          white-space: nowrap;
+        }
+
+        .flight-table-container {
+          width: 100%;
+          overflow-x: auto;
+        }
+      `}</style>
+
+      <div className="flight-table-container">
+        <ScrollArea className="h-[600px] w-full">
+          <Table>
+            <TableHeader>
+              <TableRow className="flight-table-header ">
+                <TableHead>Txn DTM</TableHead>
+                <TableHead>Carrier</TableHead>
+                <TableHead>Flt Nbr</TableHead>
+                <TableHead>Dep Stn</TableHead>
+                <TableHead>Arr Stn</TableHead>
+                <TableHead>Flt Sts</TableHead>
+                <TableHead>Flt Sts Code</TableHead>
+                <TableHead>Dep City</TableHead>
+                <TableHead>Arr City</TableHead>
+                <TableHead>Dep State</TableHead>
+                <TableHead>Arr State</TableHead>
+                <TableHead>Dep Gate</TableHead>
+                <TableHead>Arr Gate</TableHead>
+                <TableHead>Sch Dep DTM</TableHead>
+                <TableHead>Sch Arr DTM</TableHead>
+                <TableHead>Est Dep DTM</TableHead>
+                <TableHead>Est Arr DTM</TableHead>
+                <TableHead>Act Dep DTM</TableHead>
+                <TableHead>Act Arr DTM</TableHead>
+                <TableHead>Baggage claim</TableHead>
+                <TableHead className="text-right">Act</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredData.map((flight, index) => (
+                <TableRow
+                  key={flight.eventId}
+                  className={`flight-table-row ${
+                    index % 2 === 0 ? "bg-muted/20" : ""
+                  }`}
+                >
+                  <TableCell>
+                    {flight.timestamp.substring(5, 10)}.....
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "carrierCode")}
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {flight.flightNumber}
+                  </TableCell>
+
+                  <TableCell>
+                    {renderCellValue(flight, "departureAirport")}
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "arrivalAirport")}
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "flightStatus")}
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "flightStatusCode")}
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "departureCity")}
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "arrivalCity")}
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "departureStatus")}
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "arrivalStatus")}
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "departureGate")}
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "arrivalGate")}
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "scheduledDepartureUTC")}
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "scheduledArrivalUTC")}
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "estimatedDepartureUTC")}
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "estimatedArrivalUTC")}
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "actualDepartureUTC")}
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "actualArrivalUTC")}
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "baggageClaim")}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex justify-end gap-2">
+                      {hasEncryptedData(flight) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => decryptFlightData(flight)}
+                          disabled={flight.isDecrypting}
+                        >
+                          {flight.isDecrypting ? (
+                            <div className="flex items-center">
+                              <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent mr-1"></div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center">
+                              <Unlock className="h-3 w-3 mr-1" />
+                            </div>
+                          )}
+                        </Button>
                       )}
-                    </Button>
-                  )}
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </ScrollArea>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {filteredData.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={18}
+                    className="text-center py-8 text-muted-foreground"
+                  >
+                    {searchTerm
+                      ? "No flights match your search criteria"
+                      : "No flight data available"}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </div>
+    </div>
   );
 }
