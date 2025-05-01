@@ -11,9 +11,16 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { BadgeCheckIcon, BaggageClaim, Lock, Unlock } from "lucide-react";
+import { Lock, Unlock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getBaseUrl } from "@/utils/base_url";
+import { FlightSearchHeader } from "./flight-search-header";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./ui/tooltip";
 
 interface CombinedFlightTableProps {
   events: Array<{ [key: string]: any }>;
@@ -107,9 +114,32 @@ const mapStatusCodeToText = (code: string): string => {
   return statusMap[code] || code;
 };
 
+// Function to format date/time based on selected format
+const formatDateTime = (timestamp: string, format: "utc" | "local"): string => {
+  if (!timestamp || timestamp === "TBD" || timestamp === "N/A")
+    return timestamp;
+
+  try {
+    const date = new Date(timestamp);
+
+    if (format === "utc") {
+      return date
+        .toISOString()
+        .replace("T", " ")
+        .replace(/\.\d+Z$/, " UTC");
+    } else {
+      // Local time format
+      return date.toLocaleString();
+    }
+  } catch (e) {
+    return timestamp;
+  }
+};
+
 export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
   const [flightEvents, setFlightEvents] = useState<FlightData[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [timeFormat, setTimeFormat] = useState<"utc" | "local">("utc");
   const { toast } = useToast();
 
   // Process events by consolidating them based on flight number, carrier code and timestamp
@@ -242,7 +272,11 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
           !flightData.actualArrivalUTC &&
           event.args.utcTimes.actualArrivalUTC
         )
-          flightData.actualArrivalUTC = event.args.utcTimes.actualArrivalUTC;
+          if (!flightData.baggageClaim && event.args.baggageClaim) {
+            flightData.baggageClaim = event.args.baggageClaim;
+          }
+
+        flightData.actualArrivalUTC = event.args.utcTimes.actualArrivalUTC;
       }
 
       // Direct UTC time assignments
@@ -263,6 +297,10 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
 
       if (!flightData.actualArrivalUTC && event.args.actualArrivalUTC)
         flightData.actualArrivalUTC = event.args.actualArrivalUTC;
+
+      if (!flightData.baggageClaim && event.args.baggageClaim) {
+        flightData.baggageClaim = event.args.baggageClaim;
+      }
 
       // Check for encrypted data in this event
       if (event.args) {
@@ -486,6 +524,45 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
     return Object.keys(flight.encryptedData).length > 0;
   };
 
+  const columnDescriptions = {
+    "Txn DTM": "Timestamp of when the transaction was recorded (in UTC/GMT)",
+    Carrier: "Airline code (e.g., UA for United Airlines)",
+    "Flt Nbr": "Flight number",
+    "Dep Stn": "Departure airport code and city",
+    "Dep State": "U.S. state or region of the departure city",
+    "Arr Stn": "Arrival airport code and city",
+    "Arr State": "U.S. state or region of the arrival city",
+    "Flt Status": "Flight status in text format (e.g., Departed)",
+    "Flt Status Cd":
+      "Abbreviated flight status (OUT = Departed, IN = Arrived, NDPT = Not Departed)",
+    "Dep Gate": "Assigned departure gate at the airport",
+    "Arr Gate": "Assigned arrival gate at the airport",
+    "Sch Dep DTM": "Scheduled departure date and time (in UTC/GMT)",
+    "Sch Arr DTM": "Scheduled arrival date and time (in UTC/GMT)",
+    "Est Dep DTM": "Estimated departure date and time based on current data",
+    "Est Arr DTM": "Estimated arrival date and time based on current data",
+    "Actual Dep DTM": "Actual time the flight departed (when it left the gate)",
+    "Actual Arr DTM":
+      "Actual time the flight arrived (when it reached the gate)",
+    Bagclaim: "Baggage claim carousel/area for the arriving flight",
+    Action: "Options to process flight data",
+  };
+
+  const renderTableHeaderWithTooltip = (
+    label: keyof typeof columnDescriptions
+  ) => (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="cursor-pointer flex items-center">{label}</div>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-sm">
+          <p>{columnDescriptions[label] || "No description available"}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+
   // Render a cell value, handling encrypted data
   const renderCellValue = (flight: FlightData, field: keyof FlightData) => {
     const value = flight[field] as string;
@@ -516,6 +593,27 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
               >
                 {displayValue}
               </span>
+            </div>
+          );
+        }
+
+        // Format date/time fields based on selected format
+        if (
+          field === "scheduledDepartureUTC" ||
+          field === "scheduledArrivalUTC" ||
+          field === "estimatedDepartureUTC" ||
+          field === "estimatedArrivalUTC" ||
+          field === "actualDepartureUTC" ||
+          field === "actualArrivalUTC" ||
+          field === "outUtc" ||
+          field === "offUtc" ||
+          field === "onUtc" ||
+          field === "inUtc"
+        ) {
+          return (
+            <div className="flex items-center gap-1">
+              <Unlock className="h-3 w-3 text-green-500" />
+              <span>{formatDateTime(decryptedValue, timeFormat)}</span>
             </div>
           );
         }
@@ -555,6 +653,22 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
       );
     }
 
+    // Format date/time fields based on selected format
+    if (
+      field === "scheduledDepartureUTC" ||
+      field === "scheduledArrivalUTC" ||
+      field === "estimatedDepartureUTC" ||
+      field === "estimatedArrivalUTC" ||
+      field === "actualDepartureUTC" ||
+      field === "actualArrivalUTC" ||
+      field === "outUtc" ||
+      field === "offUtc" ||
+      field === "onUtc" ||
+      field === "inUtc"
+    ) {
+      return formatDateTime(value, timeFormat);
+    }
+
     return value;
   };
 
@@ -585,32 +699,62 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
         }
       `}</style>
 
+      {/* Search Header */}
+      <FlightSearchHeader
+        onTimeFormatChange={setTimeFormat}
+        timeFormat={timeFormat}
+      />
+
       <div className="flight-table-container">
         <ScrollArea className="h-[600px] w-full">
           <Table>
             <TableHeader>
               <TableRow className="flight-table-header ">
-                <TableHead>Txn DTM</TableHead>
-                <TableHead>Carrier</TableHead>
-                <TableHead>Flt Nbr</TableHead>
-                <TableHead>Dep Stn</TableHead>
-                <TableHead>Arr Stn</TableHead>
-                <TableHead>Flt Sts</TableHead>
-                <TableHead>Flt Sts Code</TableHead>
-                <TableHead>Dep City</TableHead>
-                <TableHead>Arr City</TableHead>
-                <TableHead>Dep State</TableHead>
-                <TableHead>Arr State</TableHead>
-                <TableHead>Dep Gate</TableHead>
-                <TableHead>Arr Gate</TableHead>
-                <TableHead>Sch Dep DTM</TableHead>
-                <TableHead>Sch Arr DTM</TableHead>
-                <TableHead>Est Dep DTM</TableHead>
-                <TableHead>Est Arr DTM</TableHead>
-                <TableHead>Act Dep DTM</TableHead>
-                <TableHead>Act Arr DTM</TableHead>
-                <TableHead>Baggage claim</TableHead>
-                <TableHead className="text-right">Act</TableHead>
+                <TableHead>{renderTableHeaderWithTooltip("Txn DTM")}</TableHead>
+                <TableHead>{renderTableHeaderWithTooltip("Carrier")}</TableHead>
+                <TableHead>{renderTableHeaderWithTooltip("Flt Nbr")}</TableHead>
+                <TableHead>{renderTableHeaderWithTooltip("Dep Stn")}</TableHead>
+                <TableHead>
+                  {renderTableHeaderWithTooltip("Dep State")}
+                </TableHead>
+                <TableHead>{renderTableHeaderWithTooltip("Arr Stn")}</TableHead>
+                <TableHead>
+                  {renderTableHeaderWithTooltip("Arr State")}
+                </TableHead>
+                <TableHead>
+                  {renderTableHeaderWithTooltip("Flt Status")}
+                </TableHead>
+                <TableHead>
+                  {renderTableHeaderWithTooltip("Flt Status Cd")}
+                </TableHead>
+                <TableHead>
+                  {renderTableHeaderWithTooltip("Dep Gate")}
+                </TableHead>
+                <TableHead>
+                  {renderTableHeaderWithTooltip("Arr Gate")}
+                </TableHead>
+                <TableHead>
+                  {renderTableHeaderWithTooltip("Sch Dep DTM")}
+                </TableHead>
+                <TableHead>
+                  {renderTableHeaderWithTooltip("Sch Arr DTM")}
+                </TableHead>
+                <TableHead>
+                  {renderTableHeaderWithTooltip("Est Dep DTM")}
+                </TableHead>
+                <TableHead>
+                  {renderTableHeaderWithTooltip("Est Arr DTM")}
+                </TableHead>
+                <TableHead>
+                  {renderTableHeaderWithTooltip("Actual Dep DTM")}
+                </TableHead>
+                <TableHead>
+                  {renderTableHeaderWithTooltip("Actual Arr DTM")}
+                </TableHead>
+                <TableHead>
+                  {renderTableHeaderWithTooltip("Bagclaim")}
+                </TableHead>
+                <TableHead>{renderTableHeaderWithTooltip("Action")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -632,10 +776,18 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
                   </TableCell>
 
                   <TableCell>
-                    {renderCellValue(flight, "departureAirport")}
+                    {renderCellValue(flight, "departureCity")} (
+                    {renderCellValue(flight, "departureAirport")})
                   </TableCell>
                   <TableCell>
-                    {renderCellValue(flight, "arrivalAirport")}
+                    {renderCellValue(flight, "departureStatus")}
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "arrivalCity")} (
+                    {renderCellValue(flight, "arrivalAirport")})
+                  </TableCell>
+                  <TableCell>
+                    {renderCellValue(flight, "arrivalStatus")}
                   </TableCell>
                   <TableCell>
                     {renderCellValue(flight, "flightStatus")}
@@ -643,18 +795,7 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
                   <TableCell>
                     {renderCellValue(flight, "flightStatusCode")}
                   </TableCell>
-                  <TableCell>
-                    {renderCellValue(flight, "departureCity")}
-                  </TableCell>
-                  <TableCell>
-                    {renderCellValue(flight, "arrivalCity")}
-                  </TableCell>
-                  <TableCell>
-                    {renderCellValue(flight, "departureStatus")}
-                  </TableCell>
-                  <TableCell>
-                    {renderCellValue(flight, "arrivalStatus")}
-                  </TableCell>
+
                   <TableCell>
                     {renderCellValue(flight, "departureGate")}
                   </TableCell>
@@ -693,11 +834,14 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
                         >
                           {flight.isDecrypting ? (
                             <div className="flex items-center">
-                              <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent mr-1"></div>
+                              <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent mr-1">
+                                Decrypting
+                              </div>
                             </div>
                           ) : (
                             <div className="flex items-center">
                               <Unlock className="h-3 w-3 mr-1" />
+                              Decrypt
                             </div>
                           )}
                         </Button>

@@ -5,8 +5,8 @@ import { CONTRACT_ADDRESS } from "@/lib/constants";
 
 export function Navbar() {
   return (
-    <div className="border-b">
-      <div className="flex h-16 items-center  ">
+    <div className="border-b  px-4 bg-background dark:bg-background-dark">
+      <div className="flex h-16 items-center">
         <div className="flex items-center gap-2 mr-4">
           <Plane className="h-6 w-6 text-primary" />
           <Link href="/" className="flex items-center">

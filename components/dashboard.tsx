@@ -205,7 +205,7 @@ export function Dashboard() {
         </div>
 
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid max-w-screen-sm grid-cols-2">
             <TabsTrigger value="combined" className="relative">
               <Plane className="mr-2 h-4 w-4" />
               Flight Data
