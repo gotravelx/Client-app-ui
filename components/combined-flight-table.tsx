@@ -43,9 +43,9 @@ type FlightData = {
   flightStatus: string;
   flightStatusCode: string;
   currentFlightStatusTime: string;
-  departureStatus: string;
-  arrivalStatus: string;
-  baggageClaim: string;
+  DepartureState: string;
+  ArrivalState: string;
+  bagClaim: string;
   // UTC times
   scheduledDepartureUTC: string;
   scheduledArrivalUTC: string;
@@ -182,9 +182,9 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
           event.args.CurrentFlightStatus || event.args.FlightStatus || "",
         flightStatusCode: event.args.FlightStatusCode || "",
         currentFlightStatusTime: event.args.currentFlightStatusTime || "",
-        departureStatus: event.args.DepartureStatus || "",
-        arrivalStatus: event.args.ArrivalStatus || "",
-        baggageClaim: event.args.baggageClaim || "",
+        DepartureState: event.args.DepartureState || "",
+        ArrivalState: event.args.ArrivalState || "",
+        bagClaim: event.args.bagClaim || "",
         scheduledDepartureUTC: "",
         scheduledArrivalUTC: "",
         estimatedDepartureUTC: "",
@@ -272,11 +272,7 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
           !flightData.actualArrivalUTC &&
           event.args.utcTimes.actualArrivalUTC
         )
-          if (!flightData.baggageClaim && event.args.baggageClaim) {
-            flightData.baggageClaim = event.args.baggageClaim;
-          }
-
-        flightData.actualArrivalUTC = event.args.utcTimes.actualArrivalUTC;
+          flightData.actualArrivalUTC = event.args.utcTimes.actualArrivalUTC;
       }
 
       // Direct UTC time assignments
@@ -298,8 +294,40 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
       if (!flightData.actualArrivalUTC && event.args.actualArrivalUTC)
         flightData.actualArrivalUTC = event.args.actualArrivalUTC;
 
-      if (!flightData.baggageClaim && event.args.baggageClaim) {
-        flightData.baggageClaim = event.args.baggageClaim;
+      // FIX: Extract baggage claim from the correct location in the event data
+      if (!flightData.bagClaim) {
+        // Try to get from direct args
+        if (event.args.baggageClaim) {
+          flightData.bagClaim = event.args.baggageClaim;
+        }
+        // Try to get from utcTimes structure
+        else if (event.args.utcTimes && event.args.utcTimes.baggageClaim) {
+          flightData.bagClaim = event.args.utcTimes.baggageClaim;
+        }
+      }
+
+      // FIX: Extract arrival status from the correct location in the event data
+      if (!flightData.ArrivalState) {
+        // Try to get from direct args
+        if (event.args.ArrivalState) {
+          flightData.ArrivalState = event.args.ArrivalState;
+        }
+        // Try to get from status structure
+        else if (event.args.status && event.args.status.ArrivalState) {
+          flightData.ArrivalState = event.args.status.ArrivalState;
+        }
+      }
+
+      // FIX: Extract departure status from the correct location in the event data
+      if (!flightData.DepartureState) {
+        // Try to get from direct args
+        if (event.args.DepartureState) {
+          flightData.DepartureState = event.args.DepartureState;
+        }
+        // Try to get from status structure
+        else if (event.args.status && event.args.status.DepartureState) {
+          flightData.DepartureState = event.args.status.DepartureState;
+        }
       }
 
       // Check for encrypted data in this event
@@ -314,6 +342,45 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
             }
           }
         });
+
+        // FIX: Check for encrypted data in nested objects
+        if (event.args.utcTimes) {
+          Object.entries(event.args.utcTimes).forEach(([key, value]) => {
+            if (
+              typeof value === "string" &&
+              isLikelyEncrypted(value as string)
+            ) {
+              const fullKey = `utcTimes.${key}`;
+              if (!flightData.encryptedData[fullKey]) {
+                flightData.encryptedData[fullKey] = [];
+              }
+              if (
+                !flightData.encryptedData[fullKey].includes(value as string)
+              ) {
+                flightData.encryptedData[fullKey].push(value as string);
+              }
+            }
+          });
+        }
+
+        if (event.args.status) {
+          Object.entries(event.args.status).forEach(([key, value]) => {
+            if (
+              typeof value === "string" &&
+              isLikelyEncrypted(value as string)
+            ) {
+              const fullKey = `status.${key}`;
+              if (!flightData.encryptedData[fullKey]) {
+                flightData.encryptedData[fullKey] = [];
+              }
+              if (
+                !flightData.encryptedData[fullKey].includes(value as string)
+              ) {
+                flightData.encryptedData[fullKey].push(value as string);
+              }
+            }
+          });
+        }
       }
 
       // Add this event to the flight's events array
@@ -469,6 +536,35 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
             const decrypted = decryptionMap[encrypted];
             if (decrypted) {
               updatedDecryptedData[field][idx] = decrypted;
+
+              // FIX: Handle nested fields like utcTimes.baggageClaim
+              if (field.includes(".")) {
+                const [parentField, childField] = field.split(".");
+                if (
+                  parentField === "utcTimes" &&
+                  childField === "baggageClaim"
+                ) {
+                  updatedFlight.bagClaim = decrypted;
+                  if (!updatedDecryptedData["baggageClaim"]) {
+                    updatedDecryptedData["baggageClaim"] = [];
+                  }
+                  updatedDecryptedData["baggageClaim"][0] = decrypted;
+                } else if (parentField === "status") {
+                  if (childField === "ArrivalState") {
+                    updatedFlight.ArrivalState = decrypted;
+                    if (!updatedDecryptedData["ArrivalState"]) {
+                      updatedDecryptedData["ArrivalState"] = [];
+                    }
+                    updatedDecryptedData["ArrivalState"][0] = decrypted;
+                  } else if (childField === "DepartureState") {
+                    updatedFlight.DepartureState = decrypted;
+                    if (!updatedDecryptedData["DepartureState"]) {
+                      updatedDecryptedData["DepartureState"] = [];
+                    }
+                    updatedDecryptedData["DepartureState"][0] = decrypted;
+                  }
+                }
+              }
             }
           });
         }
@@ -529,9 +625,9 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
     Carrier: "Airline code (e.g., UA for United Airlines)",
     "Flt Nbr": "Flight number",
     "Dep Stn": "Departure airport code and city",
-    "Dep State": "U.S. state or region of the departure city",
+    "Dep State": "Departure status (e.g., On-time, Delayed)",
     "Arr Stn": "Arrival airport code and city",
-    "Arr State": "U.S. state or region of the arrival city",
+    "Arr State": "Arrival status (e.g., On-time, Delayed)",
     "Flt Status": "Flight status in text format (e.g., Departed)",
     "Flt Status Cd":
       "Abbreviated flight status (OUT = Departed, IN = Arrived, NDPT = Not Departed)",
@@ -578,8 +674,8 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
         // For status fields, apply special formatting
         if (
           field === "flightStatus" ||
-          field === "departureStatus" ||
-          field === "arrivalStatus" ||
+          field === "DepartureState" ||
+          field === "ArrivalState" ||
           field === "flightStatusCode"
         ) {
           const displayValue = mapStatusCodeToText(decryptedValue);
@@ -638,8 +734,8 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
     // For non-encrypted status fields, apply special formatting
     if (
       field === "flightStatus" ||
-      field === "departureStatus" ||
-      field === "arrivalStatus"
+      field === "DepartureState" ||
+      field === "ArrivalState"
     ) {
       const displayValue = mapStatusCodeToText(value);
       const colorClass = getFlightStatusColor(value);
@@ -664,10 +760,13 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
       field === "outUtc" ||
       field === "offUtc" ||
       field === "onUtc" ||
-      field === "inUtc"
-    ) {
+      // Removed invalid line
+      (field as string) === "outUtc" ||
+      (field as string) === "offUtc" ||
+      (field as string) === "onUtc" ||
+      (field as string) === "inUtc"
+    )
       return formatDateTime(value, timeFormat);
-    }
 
     return value;
   };
@@ -765,9 +864,7 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
                     index % 2 === 0 ? "bg-muted/20" : ""
                   }`}
                 >
-                  <TableCell>
-                    {flight.timestamp.substring(5, 10)}.....
-                  </TableCell>
+                  <TableCell>{flight.timestamp.substring(0, 10)}</TableCell>
                   <TableCell>
                     {renderCellValue(flight, "carrierCode")}
                   </TableCell>
@@ -780,14 +877,14 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
                     {renderCellValue(flight, "departureAirport")})
                   </TableCell>
                   <TableCell>
-                    {renderCellValue(flight, "departureStatus")}
+                    {renderCellValue(flight, "DepartureState")}
                   </TableCell>
                   <TableCell>
                     {renderCellValue(flight, "arrivalCity")} (
                     {renderCellValue(flight, "arrivalAirport")})
                   </TableCell>
                   <TableCell>
-                    {renderCellValue(flight, "arrivalStatus")}
+                    {renderCellValue(flight, "ArrivalState")}
                   </TableCell>
                   <TableCell>
                     {renderCellValue(flight, "flightStatus")}
@@ -820,9 +917,7 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
                   <TableCell>
                     {renderCellValue(flight, "actualArrivalUTC")}
                   </TableCell>
-                  <TableCell>
-                    {renderCellValue(flight, "baggageClaim")}
-                  </TableCell>
+                  <TableCell>{renderCellValue(flight, "bagClaim")}</TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-2">
                       {hasEncryptedData(flight) && (

@@ -1,4 +1,4 @@
-export const CONTRACT_ABI =[
+export const CONTRACT_ABI = [
   {
     inputs: [],
     stateMutability: "nonpayable",
@@ -140,6 +140,18 @@ export const CONTRACT_ABI =[
         indexed: false,
         internalType: "string",
         name: "FlightStatus",
+        type: "string",
+      },
+      {
+        indexed: false,
+        internalType: "string",
+        name: "ArrivalState",
+        type: "string",
+      },
+      {
+        indexed: false,
+        internalType: "string",
+        name: "DepartureState",
         type: "string",
       },
       {
@@ -309,7 +321,7 @@ export const CONTRACT_ABI =[
       },
       {
         internalType: "string",
-        name: "baggageClaim",
+        name: "bagClaim",
         type: "string",
       },
     ],
@@ -371,12 +383,12 @@ export const CONTRACT_ABI =[
       },
       {
         internalType: "string",
-        name: "ArrivalStatus",
+        name: "ArrivalState",
         type: "string",
       },
       {
         internalType: "string",
-        name: "DepartureStatus",
+        name: "DepartureState",
         type: "string",
       },
       {
@@ -637,7 +649,7 @@ export const CONTRACT_ABI =[
           },
           {
             internalType: "string",
-            name: "baggageClaim",
+            name: "bagClaim",
             type: "string",
           },
         ],
@@ -659,12 +671,12 @@ export const CONTRACT_ABI =[
           },
           {
             internalType: "string",
-            name: "ArrivalStatus",
+            name: "ArrivalState",
             type: "string",
           },
           {
             internalType: "string",
-            name: "DepartureStatus",
+            name: "DepartureState",
             type: "string",
           },
           {

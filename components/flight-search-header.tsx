@@ -71,7 +71,7 @@ export function FlightSearchHeader({
             <Label htmlFor="flightNumber">Flight Number</Label>
             <Input
               id="flightNumber"
-              placeholder="e.g. 123"
+              placeholder="e.g. 1234"
               value={flightNumber}
               onChange={(e) => setFlightNumber(e.target.value)}
             />
