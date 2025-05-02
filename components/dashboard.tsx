@@ -89,23 +89,6 @@ export function Dashboard() {
           });
         });
 
-        // flightContract.on("UTCTimeSet", (...args) => {
-        //   const event = args[args.length - 1];
-        //   const newEvent = {
-        //     ...event,
-        //     eventName: "UTCTimeSet",
-        //     timestamp: new Date().toISOString(),
-        //   };
-        //   console.log("UTCTimeSet event received:", newEvent);
-        //   setEvents((prev) => [newEvent, ...prev]);
-
-        //   // Show toast notification
-        //   toast({
-        //     title: "Flight Time Update",
-        //     description: "Flight schedule times have been updated",
-        //   });
-        // });
-
         flightContract.on("SubscriptionDetails", (...args) => {
           const event = args[args.length - 1];
           const newEvent = {
