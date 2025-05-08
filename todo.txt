@@ -1,0 +1,33 @@
+Move decryption to backend app code 
+remove the private key form client app 
+build an api for decryption 
+client app new web socket rec call the api 
+fields define them shown on client every status is change 
+Transaction Datetime col
+------------------------------------------
+flight status , not departed ---> 
+departure state ex- on-time 
+arrival state  ex- on-time
+
+----------------------------
+departure station 
+arrival station
+flight number 
+departure gate
+arrival gate 
+bag claim
+--------------------------
+date's
+sch_departure & time
+sch_arrival & time
+
+estimated_departure & time
+estimated_arrival & time
+
+actual_departure & time
+actual_arrival & time
+-----------------------------
+
+Date & Time -> Transaction Datetime
+ 
+(Provide UTC Datetimestamp)
