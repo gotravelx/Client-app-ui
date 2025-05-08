@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, createContext } from "react";
 import {
   Table,
   TableBody,
@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Lock, Unlock } from "lucide-react";
+import { Lock, Unlock, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getBaseUrl } from "@/utils/base_url";
 import { FlightSearchHeader, type SearchParams } from "./flight-search-header";
@@ -20,6 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./ui/tooltip";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface CombinedFlightTableProps {
   events: Array<{ [key: string]: any }>;
@@ -65,6 +66,8 @@ type FlightData = {
   encryptedData: Record<string, string[]>;
   decryptedData: Record<string, string[]>;
   isDecrypting: boolean;
+  // Source of the data (blockchain or API)
+  source: "blockchain" | "api";
 };
 
 // Helper function to check if a string might be encrypted
@@ -100,18 +103,61 @@ const getFlightStatusColor = (status: string): string => {
   return "bg-gray-100 text-gray-800";
 };
 
-// Function to map status codes to human-readable text
+// Update the mapStatusCodeToText function to ensure consistent capitalization
 const mapStatusCodeToText = (code: string): string => {
   const statusMap: Record<string, string> = {
     NDPT: "Not Departed",
     OUT: "Departed",
     OFF: "In Flight",
     ON: "Landed",
-    IN: "Arrived",
+    IN: "Arrived At Gate",
   };
 
-  return statusMap[code] || code;
+  // If we have a mapping, use it with proper capitalization
+  if (statusMap[code]) {
+    return statusMap[code];
+  }
+
+  // For other values, ensure consistent capitalization
+  if (typeof code === "string") {
+    // Convert to title case (first letter of each word capitalized)
+    return code.toLowerCase().replace(/\b\w/g, (s) => s.toUpperCase());
+  }
+
+  return code || "";
 };
+
+// Add a function to determine if a cell should be visible
+const shouldShowCell = (value: any): boolean => {
+  if (value === null || value === undefined) return false;
+  if (
+    typeof value === "string" &&
+    (value.trim() === "" || value === "TBD" || value === "N/A" || value === "-")
+  )
+    return false;
+  return true;
+};
+
+// Create a React Context for decryption state
+// Create a context for decryption state
+const DecryptionContext = createContext<{
+  isDecrypting: boolean;
+  decryptedMap: Record<string, string>;
+  pendingDecryption: string[];
+  timeFormat: "utc" | "local";
+}>({
+  isDecrypting: false,
+  decryptedMap: {},
+  pendingDecryption: [],
+  timeFormat: "utc",
+});
+
+// Add a skeleton loader component for cells
+const CellSkeleton = () => (
+  <div className="animate-pulse flex space-x-4">
+    <div className="h-4 bg-muted rounded w-16"></div>
+  </div>
+);
 
 // Update the formatDateTime function to show AM/PM for local time
 const formatDateTime = (timestamp: string, format: "utc" | "local"): string => {
@@ -144,6 +190,48 @@ const formatDateTime = (timestamp: string, format: "utc" | "local"): string => {
   }
 };
 
+// Determine flight status based on UTC timestamps
+const determineFlightStatus = (flight: FlightData): string => {
+  // If we already have a status from the blockchain, use it
+  if (shouldShowCell(flight.flightStatus)) {
+    return flight.flightStatus;
+  }
+
+  // Otherwise, determine status based on UTC timestamps
+  if (shouldShowCell(flight.inUtc)) {
+    return "Arrived At Gate";
+  } else if (shouldShowCell(flight.onUtc)) {
+    return "Landed";
+  } else if (shouldShowCell(flight.offUtc)) {
+    return "In Flight";
+  } else if (shouldShowCell(flight.outUtc)) {
+    return "Departed";
+  } else {
+    return "Not Departed";
+  }
+};
+
+// Determine flight status code based on UTC timestamps
+const determineFlightStatusCode = (flight: FlightData): string => {
+  // If we already have a status code from the blockchain, use it
+  if (shouldShowCell(flight.flightStatusCode)) {
+    return flight.flightStatusCode;
+  }
+
+  // Otherwise, determine status code based on UTC timestamps
+  if (shouldShowCell(flight.inUtc)) {
+    return "IN";
+  } else if (shouldShowCell(flight.onUtc)) {
+    return "ON";
+  } else if (shouldShowCell(flight.offUtc)) {
+    return "OFF";
+  } else if (shouldShowCell(flight.outUtc)) {
+    return "OUT";
+  } else {
+    return "NDPT";
+  }
+};
+
 export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
   const [flightEvents, setFlightEvents] = useState<FlightData[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<FlightData[]>([]);
@@ -153,6 +241,8 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isDecrypting, setIsDecrypting] = useState(false);
   const [decryptedMap, setDecryptedMap] = useState<Record<string, string>>({});
+  const [pendingDecryption, setPendingDecryption] = useState<string[]>([]);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   // Process events by consolidating them based on flight number, carrier code and timestamp
   // Memoize this function to avoid unnecessary re-processing
@@ -214,6 +304,7 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
         encryptedData: {},
         decryptedData: {},
         isDecrypting: false,
+        source: "blockchain",
       };
 
       // Merge data if we already have an entry
@@ -263,27 +354,27 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
           event.args.utcTimes.estimatedDepartureUTC
         )
           flightData.estimatedDepartureUTC =
-            event.args.utcTimes.estimatedDepartureUTC;
+            event.args.utcTimes.scheduledDepartureUTC;
 
         if (
           !flightData.estimatedArrivalUTC &&
           event.args.utcTimes.estimatedArrivalUTC
         )
           flightData.estimatedArrivalUTC =
-            event.args.utcTimes.estimatedArrivalUTC;
+            event.args.utcTimes.scheduledArrivalUTC;
 
         if (
           !flightData.actualDepartureUTC &&
           event.args.utcTimes.actualDepartureUTC
         )
           flightData.actualDepartureUTC =
-            event.args.utcTimes.actualDepartureUTC;
+            event.args.utcTimes.scheduledDepartureUTC;
 
         if (
           !flightData.actualArrivalUTC &&
           event.args.utcTimes.actualArrivalUTC
         )
-          flightData.actualArrivalUTC = event.args.utcTimes.actualArrivalUTC;
+          flightData.actualArrivalUTC = event.args.utcTimes.scheduledArrivalUTC;
       }
 
       // Direct UTC time assignments
@@ -339,6 +430,31 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
         else if (event.args.status && event.args.status.DepartureState) {
           flightData.DepartureState = event.args.status.DepartureState;
         }
+      }
+
+      // Extract UTC timeline data
+      if (!flightData.outUtc && event.args.outUtc) {
+        flightData.outUtc = event.args.outUtc;
+      } else if (event.args.status && event.args.status.outUtc) {
+        flightData.outUtc = event.args.status.outUtc;
+      }
+
+      if (!flightData.offUtc && event.args.offUtc) {
+        flightData.offUtc = event.args.offUtc;
+      } else if (event.args.status && event.args.status.offUtc) {
+        flightData.offUtc = event.args.status.offUtc;
+      }
+
+      if (!flightData.onUtc && event.args.onUtc) {
+        flightData.onUtc = event.args.onUtc;
+      } else if (event.args.status && event.args.status.onUtc) {
+        flightData.onUtc = event.args.status.onUtc;
+      }
+
+      if (!flightData.inUtc && event.args.inUtc) {
+        flightData.inUtc = event.args.inUtc;
+      } else if (event.args.status && event.args.status.inUtc) {
+        flightData.inUtc = event.args.status.inUtc;
       }
 
       // Check for encrypted data in this event
@@ -427,7 +543,8 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
             field === "encryptedData" ||
             field === "decryptedData" ||
             field === "isDecrypting" ||
-            field === "eventId"
+            field === "eventId" ||
+            field === "source"
           )
             return;
 
@@ -486,6 +603,30 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
                         updatedDecryptedData["DepartureState"] = [];
                       }
                       updatedDecryptedData["DepartureState"][0] = decrypted;
+                    } else if (childField === "outUtc") {
+                      updatedFlight.outUtc = decrypted;
+                      if (!updatedDecryptedData["outUtc"]) {
+                        updatedDecryptedData["outUtc"] = [];
+                      }
+                      updatedDecryptedData["outUtc"][0] = decrypted;
+                    } else if (childField === "offUtc") {
+                      updatedFlight.offUtc = decrypted;
+                      if (!updatedDecryptedData["offUtc"]) {
+                        updatedDecryptedData["offUtc"] = [];
+                      }
+                      updatedDecryptedData["offUtc"][0] = decrypted;
+                    } else if (childField === "onUtc") {
+                      updatedFlight.onUtc = decrypted;
+                      if (!updatedDecryptedData["onUtc"]) {
+                        updatedDecryptedData["onUtc"] = [];
+                      }
+                      updatedDecryptedData["onUtc"][0] = decrypted;
+                    } else if (childField === "inUtc") {
+                      updatedFlight.inUtc = decrypted;
+                      if (!updatedDecryptedData["inUtc"]) {
+                        updatedDecryptedData["inUtc"] = [];
+                      }
+                      updatedDecryptedData["inUtc"][0] = decrypted;
                     }
                   }
                 }
@@ -512,12 +653,275 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
     setFilteredEvents(decryptedProcessedEvents);
   }, [events, processEvents, getDecryptedFlights]);
 
+  // Function to fetch historical flight data from API
+  const fetchHistoricalFlightData = async (
+    flightNumber: string,
+    carrierCode: string,
+    startDate: string,
+    endDate: string
+  ) => {
+    setIsLoading(true);
+    setApiError(null);
+
+    try {
+      const response = await fetch(
+        `${getBaseUrl()}/flights/fetch-historical/${flightNumber}/date-range?fromDate=${startDate}&toDate=${endDate}&carrierCode=${carrierCode}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("API Response:", data);
+
+      if (!data.flightDetails || data.flightDetails.length === 0) {
+        toast({
+          title: "No historical data found",
+          description:
+            "No historical flight data was found for the specified criteria.",
+          variant: "destructive",
+        });
+        return [];
+      }
+
+      // Process the API response into FlightData objects
+      const apiFlightData: FlightData[] = data.flightDetails.map(
+        (flightDetail: any, index: number) => {
+          const timestamp = new Date();
+          timestamp.setHours(timestamp.getHours() - index); // Stagger timestamps for display
+
+          // Create a unique ID for this flight
+          const flightId = `api-${flightDetail.flightNumber}-${flightDetail.scheduledDepartureDate}-${index}`;
+
+          console.log(`Processing API flight: ${flightId}`, flightDetail);
+
+          const flightData: FlightData = {
+            eventId: flightId,
+            timestamp: timestamp.toISOString(),
+            flightNumber: flightDetail.flightNumber,
+            carrierCode: flightDetail.carrierCode,
+            scheduledDepartureDate: flightDetail.scheduledDepartureDate,
+            departureCity: flightDetail.departureCity || "",
+            arrivalCity: flightDetail.arrivalCity || "",
+            departureAirport: flightDetail.departureAirport || "",
+            arrivalAirport: flightDetail.arrivalAirport || "",
+            departureGate: flightDetail.departureGate || "",
+            arrivalGate: flightDetail.arrivalGate || "",
+            operatingAirlineCode: flightDetail.operatingAirlineCode || "",
+            equipmentModel: flightDetail.equipmentModel || "",
+            flightStatus:
+              flightDetail.flightStatus || flightDetail.currentStatus || "",
+            flightStatusCode: flightDetail.status?.statusCode || "",
+            currentFlightStatusTime: "",
+            DepartureState: flightDetail.status?.departureState || "",
+            ArrivalState: flightDetail.status?.arrivalState || "",
+            bagClaim: flightDetail.utcTimes?.bagClaim || "",
+            scheduledDepartureUTC: "",
+            scheduledArrivalUTC: "",
+            estimatedDepartureUTC: "",
+            estimatedArrivalUTC: "",
+            actualDepartureUTC: "",
+            actualArrivalUTC: "",
+            departureDelayMinutes: "",
+            arrivalDelayMinutes: "",
+            outUtc: "",
+            offUtc: "",
+            inUtc: "",
+            events: [],
+            encryptedData: {},
+            decryptedData: {},
+            isDecrypting: false,
+            source: "api",
+          };
+
+          // Collect encrypted data from the API response
+          const collectEncryptedData = (obj: any, prefix = "") => {
+            if (!obj) return;
+
+            Object.entries(obj).forEach(([key, value]) => {
+              const fullKey = prefix ? `${prefix}.${key}` : key;
+
+              if (
+                typeof value === "string" &&
+                isLikelyEncrypted(value as string)
+              ) {
+                if (!flightData.encryptedData[fullKey]) {
+                  flightData.encryptedData[fullKey] = [];
+                }
+                flightData.encryptedData[fullKey].push(value as string);
+
+                // Also store encrypted values directly in the corresponding fields
+                if (key === "departureCity")
+                  flightData.departureCity = value as string;
+                if (key === "arrivalCity")
+                  flightData.arrivalCity = value as string;
+                if (key === "departureGate")
+                  flightData.departureGate = value as string;
+                if (key === "arrivalGate")
+                  flightData.arrivalGate = value as string;
+                if (key === "flightStatus")
+                  flightData.flightStatus = value as string;
+                if (key === "equipmentModel")
+                  flightData.equipmentModel = value as string;
+                if (key === "operatingAirlineCode")
+                  flightData.operatingAirlineCode = value as string;
+              } else if (typeof value === "object" && value !== null) {
+                collectEncryptedData(value, fullKey);
+              }
+            });
+          };
+
+          // Collect encrypted data from the flight detail
+          collectEncryptedData(flightDetail);
+
+          // Process utcTimes if available
+          if (flightDetail.utcTimes) {
+            // Store the encrypted values directly in the corresponding fields
+            flightData.scheduledDepartureUTC =
+              flightDetail.utcTimes.scheduledDeparture || "";
+            flightData.scheduledArrivalUTC =
+              flightDetail.utcTimes.scheduledArrival || "";
+            flightData.estimatedDepartureUTC =
+              flightDetail.utcTimes.estimatedDeparture || "";
+            flightData.estimatedArrivalUTC =
+              flightDetail.utcTimes.estimatedArrival || "";
+            flightData.actualDepartureUTC =
+              flightDetail.utcTimes.actualDeparture || "";
+            flightData.actualArrivalUTC =
+              flightDetail.utcTimes.actualArrival || "";
+            flightData.departureDelayMinutes =
+              flightDetail.utcTimes.departureDelayMinutes || "";
+            flightData.arrivalDelayMinutes =
+              flightDetail.utcTimes.arrivalDelayMinutes || "";
+            flightData.bagClaim = flightDetail.utcTimes.bagClaim || "";
+
+            collectEncryptedData(flightDetail.utcTimes, "utcTimes");
+          }
+
+          // Process status if available
+          if (flightDetail.status) {
+            flightData.flightStatusCode = flightDetail.status.statusCode || "";
+            flightData.DepartureState =
+              flightDetail.status.departureState || "";
+            flightData.ArrivalState = flightDetail.status.arrivalState || "";
+            flightData.outUtc = flightDetail.status.outUtc || "";
+            flightData.offUtc = flightDetail.status.offUtc || "";
+            flightData.onUtc = flightDetail.status.onUtc || "";
+            flightData.inUtc = flightDetail.status.inUtc || "";
+
+            collectEncryptedData(flightDetail.status, "status");
+          }
+
+          return flightData;
+        }
+      );
+
+      console.log("Processed API Flight Data:", apiFlightData);
+
+      // Collect all encrypted values for decryption
+      const allEncryptedValues: string[] = [];
+      apiFlightData.forEach((flight) => {
+        Object.values(flight.encryptedData).forEach((values) => {
+          values.forEach((value) => {
+            if (!allEncryptedValues.includes(value)) {
+              allEncryptedValues.push(value);
+            }
+          });
+        });
+      });
+
+      console.log("Encrypted values to decrypt:", allEncryptedValues);
+
+      // If there are encrypted values, decrypt them
+      if (allEncryptedValues.length > 0) {
+        setIsDecrypting(true);
+
+        try {
+          const decryptResponse = await fetch(
+            `${getBaseUrl()}/flights/decrypt-flight-data`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                encryptedData: allEncryptedValues,
+              }),
+            }
+          );
+
+          if (!decryptResponse.ok) {
+            throw new Error(`Decryption API error: ${decryptResponse.status}`);
+          }
+
+          const decryptData = await decryptResponse.json();
+          console.log("Decryption response:", decryptData);
+
+          // Create a mapping of encrypted to decrypted values
+          const newDecryptedMap: Record<string, string> = { ...decryptedMap };
+          allEncryptedValues.forEach((encrypted, index) => {
+            if (decryptData.decryptedData[index]) {
+              newDecryptedMap[encrypted] = decryptData.decryptedData[index];
+            }
+          });
+
+          // Update the decryption map
+          setDecryptedMap(newDecryptedMap);
+
+          toast({
+            title: "Decryption successful",
+            description: `Successfully decrypted ${
+              Object.keys(newDecryptedMap).length -
+              Object.keys(decryptedMap).length
+            } new values from historical data.`,
+          });
+        } catch (apiError) {
+          console.error("Error decrypting historical data:", apiError);
+          toast({
+            title: "Decryption failed",
+            description: "Failed to decrypt historical flight data.",
+            variant: "destructive",
+          });
+        } finally {
+          setIsDecrypting(false);
+        }
+      }
+
+      return apiFlightData;
+    } catch (error) {
+      console.error("Error fetching historical flight data:", error);
+      setApiError(
+        `Failed to fetch historical flight data: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+      toast({
+        title: "API Error",
+        description: `Failed to fetch historical flight data: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+        variant: "destructive",
+      });
+      return [];
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSearch = useCallback(
     async (searchParams: SearchParams) => {
       setIsLoading(true);
+      setApiError(null);
 
       try {
-        // Filter the existing flight events based on search parameters
+        // First, filter the existing blockchain events based on search parameters
         const filtered = flightEvents.filter((flight) => {
           // Match carrier code
           if (
@@ -545,34 +949,83 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
             if (flightDate < startDate || flightDate > endDate) {
               return false;
             }
+
+            return true;
           }
-
-          return true;
         });
 
-        setFilteredEvents(filtered);
+        // If we have a flight number and carrier code, also fetch historical data from API
+        let apiFlights: FlightData[] = [];
+        if (
+          searchParams.flightNumber &&
+          searchParams.carrierCode &&
+          searchParams.startDate &&
+          searchParams.endDate
+        ) {
+          const startDateStr = searchParams.startDate
+            .toISOString()
+            .split("T")[0];
+          const endDateStr = searchParams.endDate.toISOString().split("T")[0];
 
-        // Also try to fetch from API
-        const response = await fetch(`${getBaseUrl()}/flights/search`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(searchParams),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          // Process and merge API results if needed
-          // This would depend on the API response format
+          apiFlights = await fetchHistoricalFlightData(
+            searchParams.flightNumber,
+            searchParams.carrierCode,
+            startDateStr,
+            endDateStr
+          );
         }
-      } catch (error) {
-        console.error("Error searching flights:", error);
+
+        // Combine blockchain and API data
+        const combinedFlights = [...filtered];
+
+        // Only add API flights that don't already exist in the blockchain data
+        apiFlights.forEach((apiFlight) => {
+          console.log("Adding API flight to combined flights:", apiFlight);
+          const exists = combinedFlights.some(
+            (flight) =>
+              flight.flightNumber === apiFlight.flightNumber &&
+              flight.carrierCode === apiFlight.carrierCode &&
+              flight.scheduledDepartureDate === apiFlight.scheduledDepartureDate
+          );
+
+          if (!exists) {
+            combinedFlights.push(apiFlight);
+          }
+        });
+
+        console.log("Combined flights before decryption:", combinedFlights);
+
+        // Apply decryption to the combined flights
+        const decryptedFlights = getDecryptedFlights(combinedFlights);
+        console.log("Decrypted flights:", decryptedFlights);
+
+        // Sort by timestamp (newest first)
+        const sortedFlights = decryptedFlights.sort((a, b) => {
+          return (
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          );
+        });
+
+        console.log("Final sorted flights to display:", sortedFlights);
+        setFilteredEvents(sortedFlights);
+
+        // Show toast with results
+        toast({
+          title: "Search completed",
+          description: `Found ${sortedFlights.length} flights matching your criteria.`,
+        });
+      } catch (searchError) {
+        console.error("Error searching flights:", searchError);
+        setApiError(
+          `Search error: ${
+            searchError instanceof Error ? searchError.message : "Unknown error"
+          }`
+        );
       } finally {
         setIsLoading(false);
       }
     },
-    [flightEvents]
+    [flightEvents, getDecryptedFlights]
   );
 
   // Collect encrypted values from all flights - do this once
@@ -592,7 +1045,8 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
           field !== "encryptedData" &&
           field !== "decryptedData" &&
           field !== "isDecrypting" &&
-          field !== "eventId"
+          field !== "eventId" &&
+          field !== "source"
         ) {
           if (!allEncryptedValues.includes(value)) {
             allEncryptedValues.push(value);
@@ -609,6 +1063,11 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
         });
       });
     });
+
+    // Update pending decryption state
+    if (allEncryptedValues.length > 0) {
+      setPendingDecryption(allEncryptedValues);
+    }
 
     return allEncryptedValues.length > 0 ? allEncryptedValues : null;
   }, [flightEvents, isDecrypting, decryptedMap]);
@@ -773,7 +1232,8 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
         field !== "encryptedData" &&
         field !== "decryptedData" &&
         field !== "isDecrypting" &&
-        field !== "eventId"
+        field !== "eventId" &&
+        field !== "source"
       ) {
         return true;
       }
@@ -802,6 +1262,7 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
     "Actual Arr DTM":
       "Actual time the flight arrived (when it reached the gate)",
     Bagclaim: "Baggage claim carousel/area for the arriving flight",
+    Source: "Source of the flight data (blockchain or API)",
   };
 
   const renderTableHeaderWithTooltip = (
@@ -819,17 +1280,38 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
     </TooltipProvider>
   );
 
-  // Render a cell value, handling encrypted data
+  // Update the renderCellValue function to use the context and show skeletons
   const renderCellValue = (flight: FlightData, field: keyof FlightData) => {
     const value = flight[field] as string;
 
-    if (!value) return "TBD";
+    // Special handling for baggage claim and actual arrival - show TBD if missing
+    if (
+      (field === "bagClaim" || field === "actualArrivalUTC") &&
+      !shouldShowCell(value)
+    ) {
+      return (
+        <span className="text-muted-foreground text-xs font-medium">TBD</span>
+      );
+    }
+
+    // Don't show empty or TBD values for other fields
+    if (!shouldShowCell(value)) {
+      // For missing fields in rows that have most data, show TBD
+      return (
+        <span className="text-muted-foreground text-xs font-medium">TBD</span>
+      );
+    }
 
     // Check if this value is encrypted
     if (isLikelyEncrypted(value)) {
-      // If we have decrypted this field
-      if (flight.decryptedData[field] && flight.decryptedData[field][0]) {
-        const decryptedValue = flight.decryptedData[field][0];
+      // If we're currently decrypting this value, show a skeleton
+      if (isDecrypting && pendingDecryption.includes(value)) {
+        return <CellSkeleton />;
+      }
+
+      // If we have already decrypted this value
+      if (decryptedMap[value]) {
+        const decryptedValue = decryptedMap[value];
 
         // For status fields, apply special formatting
         if (
@@ -891,7 +1373,7 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
       );
     }
 
-    // For non-encrypted status fields, apply special formatting
+    // For non-encrypted status fields, apply special formatting with consistent capitalization
     if (
       field === "flightStatus" ||
       field === "DepartureState" ||
@@ -925,193 +1407,377 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
       return formatDateTime(value, timeFormat);
     }
 
+    // Special handling for source field
+    if (field === "source") {
+      return (
+        <span
+          className={`px-2 py-1 rounded-md text-xs font-medium ${
+            value === "api"
+              ? "bg-blue-100 text-blue-800"
+              : "bg-green-100 text-green-800"
+          }`}
+        >
+          {value === "api" ? "API" : "Blockchain"}
+        </span>
+      );
+    }
+
     return value;
   };
 
+  // Clear pending decryption when decryption is complete
+  useEffect(() => {
+    if (!isDecrypting && pendingDecryption.length > 0) {
+      setPendingDecryption([]);
+    }
+  }, [isDecrypting, pendingDecryption]);
+
   return (
-    <div className="space-y-4">
-      <style jsx global>{`
-        .flight-table-header {
-          background-color: black;
-          color: white;
-        }
+    <DecryptionContext.Provider
+      value={{
+        isDecrypting,
+        decryptedMap,
+        pendingDecryption,
+        timeFormat,
+      }}
+    >
+      <div className="space-y-4">
+        <style jsx global>{`
+          .flight-table-header {
+            background-color: black;
+            color: white;
+          }
 
-        .flight-table-header th {
-          white-space: nowrap;
-          background-color: black;
-          color: white;
-          text-align: left;
-          font-weight: 600;
-        }
+          .flight-table-header th {
+            white-space: nowrap;
+            background-color: black;
+            color: white;
+            text-align: left;
+            font-weight: 600;
+          }
 
-        .flight-table-row td {
-          text-align: left;
-          white-space: nowrap;
-        }
+          .flight-table-row td {
+            text-align: left;
+            white-space: nowrap;
+          }
 
-        .flight-table-container {
-          width: 100%;
-          overflow-x: auto;
-        }
+          .flight-table-container {
+            width: 100%;
+            overflow-x: auto;
+          }
 
-        /* Fix for Txn DTM column to show full values */
-        .txn-dtm-cell {
-          min-width: 150px;
-          max-width: 200px;
-        }
-      `}</style>
+          /* Fix for Txn DTM column to show full values */
+          .txn-dtm-cell {
+            min-width: 150px;
+            max-width: 200px;
+          }
+        `}</style>
 
-      {/* Search Header */}
-      <FlightSearchHeader
-        onTimeFormatChange={setTimeFormat}
-        timeFormat={timeFormat}
-        onSearch={handleSearch}
-        flightData={filteredEvents}
-      />
+        {/* Search Header */}
+        <FlightSearchHeader
+          onTimeFormatChange={setTimeFormat}
+          timeFormat={timeFormat}
+          onSearch={handleSearch}
+          flightData={filteredEvents}
+        />
 
-      <div className="flight-table-container">
-        <ScrollArea className="h-[600px] w-full">
-          <Table>
-            <TableHeader>
-              <TableRow className="flight-table-header ">
-                <TableHead className="txn-dtm-cell">
-                  {renderTableHeaderWithTooltip("Txn DTM")}
-                </TableHead>
-                <TableHead>{renderTableHeaderWithTooltip("Carrier")}</TableHead>
-                <TableHead>{renderTableHeaderWithTooltip("Flt Nbr")}</TableHead>
-                <TableHead>{renderTableHeaderWithTooltip("Dep Stn")}</TableHead>
-                <TableHead>
-                  {renderTableHeaderWithTooltip("Dep State")}
-                </TableHead>
-                <TableHead>{renderTableHeaderWithTooltip("Arr Stn")}</TableHead>
-                <TableHead>
-                  {renderTableHeaderWithTooltip("Arr State")}
-                </TableHead>
-                <TableHead>
-                  {renderTableHeaderWithTooltip("Flt Status")}
-                </TableHead>
-                <TableHead>
-                  {renderTableHeaderWithTooltip("Flt Status Cd")}
-                </TableHead>
-                <TableHead>
-                  {renderTableHeaderWithTooltip("Dep Gate")}
-                </TableHead>
-                <TableHead>
-                  {renderTableHeaderWithTooltip("Arr Gate")}
-                </TableHead>
-                <TableHead>
-                  {renderTableHeaderWithTooltip("Sch Dep DTM")}
-                </TableHead>
-                <TableHead>
-                  {renderTableHeaderWithTooltip("Sch Arr DTM")}
-                </TableHead>
-                <TableHead>
-                  {renderTableHeaderWithTooltip("Est Dep DTM")}
-                </TableHead>
-                <TableHead>
-                  {renderTableHeaderWithTooltip("Est Arr DTM")}
-                </TableHead>
-                <TableHead>
-                  {renderTableHeaderWithTooltip("Actual Dep DTM")}
-                </TableHead>
-                <TableHead>
-                  {renderTableHeaderWithTooltip("Actual Arr DTM")}
-                </TableHead>
-                <TableHead>
-                  {renderTableHeaderWithTooltip("Bagclaim")}
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={18} className="text-center py-8">
-                    <div className="flex justify-center items-center">
-                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent mr-2"></div>
-                      Loading flight data...
-                    </div>
-                  </TableCell>
+        {apiError && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{apiError}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="flight-table-container">
+          <ScrollArea className="h-[600px] w-full">
+            <Table>
+              <TableHeader>
+                <TableRow className="flight-table-header ">
+                  <TableHead className="txn-dtm-cell">
+                    {renderTableHeaderWithTooltip("Txn DTM")}
+                  </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Carrier")}
+                  </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Flt Nbr")}
+                  </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Dep Stn")}
+                  </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Dep State")}
+                  </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Arr Stn")}
+                  </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Arr State")}
+                  </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Flt Status")}
+                  </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Flt Status Cd")}
+                  </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Dep Gate")}
+                  </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Arr Gate")}
+                  </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Sch Dep DTM")}
+                  </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Sch Arr DTM")}
+                  </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Est Dep DTM")}
+                  </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Est Arr DTM")}
+                  </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Actual Dep DTM")}
+                  </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Actual Arr DTM")}
+                  </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Bagclaim")}
+                  </TableHead>
                 </TableRow>
-              ) : filteredEvents.length > 0 ? (
-                filteredEvents.map((flight, index) => (
-                  <TableRow
-                    key={flight.eventId}
-                    className={`flight-table-row ${
-                      index % 2 === 0 ? "bg-muted/20" : ""
-                    }`}
-                  >
-                    <TableCell className="txn-dtm-cell">
-                      {flight.timestamp}
-                    </TableCell>
-                    <TableCell>
-                      {renderCellValue(flight, "carrierCode")}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {flight.flightNumber}
-                    </TableCell>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  Array(5)
+                    .fill(0)
+                    .map((_, index) => (
+                      <TableRow key={`skeleton-${index}`}>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                ) : filteredEvents.length > 0 ? (
+                  filteredEvents
+                    .filter((flight) => {
+                      // Only show rows that have essential data
+                      const hasEssentialData =
+                        shouldShowCell(flight.flightNumber) &&
+                        shouldShowCell(flight.carrierCode) &&
+                        (shouldShowCell(flight.departureAirport) ||
+                          shouldShowCell(flight.departureCity)) &&
+                        (shouldShowCell(flight.arrivalAirport) ||
+                          shouldShowCell(flight.arrivalCity));
+                      return hasEssentialData;
+                    })
+                    .map((flight, index) => {
+                      // Determine flight status based on UTC timestamps if not already set
+                      const displayFlightStatus = shouldShowCell(
+                        flight.flightStatus
+                      )
+                        ? flight.flightStatus
+                        : determineFlightStatus(flight);
 
-                    <TableCell>
-                      {renderCellValue(flight, "departureCity")} (
-                      {renderCellValue(flight, "departureAirport")})
-                    </TableCell>
-                    <TableCell>
-                      {renderCellValue(flight, "DepartureState")}
-                    </TableCell>
-                    <TableCell>
-                      {renderCellValue(flight, "arrivalCity")} (
-                      {renderCellValue(flight, "arrivalAirport")})
-                    </TableCell>
-                    <TableCell>
-                      {renderCellValue(flight, "ArrivalState")}
-                    </TableCell>
-                    <TableCell>
-                      {renderCellValue(flight, "flightStatus")}
-                    </TableCell>
-                    <TableCell>
-                      {renderCellValue(flight, "flightStatusCode")}
-                    </TableCell>
+                      const displayFlightStatusCode = shouldShowCell(
+                        flight.flightStatusCode
+                      )
+                        ? flight.flightStatusCode
+                        : determineFlightStatusCode(flight);
 
-                    <TableCell>
-                      {renderCellValue(flight, "departureGate")}
+                      return (
+                        <TableRow
+                          key={flight.eventId}
+                          className={`flight-table-row ${
+                            index % 2 === 0 ? "bg-muted/20" : ""
+                          }`}
+                        >
+                          <TableCell className="txn-dtm-cell">
+                            {flight.timestamp}
+                          </TableCell>
+                          <TableCell>
+                            {renderCellValue(flight, "carrierCode")}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {flight.flightNumber}
+                          </TableCell>
+
+                          <TableCell>
+                            {shouldShowCell(flight.departureCity) ||
+                            shouldShowCell(flight.departureAirport) ? (
+                              <>
+                                {renderCellValue(flight, "departureCity")}
+                                {shouldShowCell(flight.departureAirport) && (
+                                  <>
+                                    {" "}
+                                    (
+                                    {renderCellValue(
+                                      flight,
+                                      "departureAirport"
+                                    )}
+                                    )
+                                  </>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-muted-foreground text-xs font-medium">
+                                TBD
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {renderCellValue(flight, "DepartureState")}
+                          </TableCell>
+                          <TableCell>
+                            {shouldShowCell(flight.arrivalCity) ||
+                            shouldShowCell(flight.arrivalAirport) ? (
+                              <>
+                                {renderCellValue(flight, "arrivalCity")}
+                                {shouldShowCell(flight.arrivalAirport) && (
+                                  <>
+                                    {" "}
+                                    ({renderCellValue(flight, "arrivalAirport")}
+                                    )
+                                  </>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-muted-foreground text-xs font-medium">
+                                TBD
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {renderCellValue(flight, "ArrivalState")}
+                          </TableCell>
+                          <TableCell>
+                            <span
+                              className={`px-2 py-1 rounded-md text-xs font-medium ${getFlightStatusColor(
+                                displayFlightStatus
+                              )}`}
+                            >
+                              {mapStatusCodeToText(displayFlightStatus)}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span
+                              className={`px-2 py-1 rounded-md text-xs font-medium ${getFlightStatusColor(
+                                displayFlightStatusCode
+                              )}`}
+                            >
+                              {displayFlightStatusCode}
+                            </span>
+                          </TableCell>
+
+                          <TableCell>
+                            {renderCellValue(flight, "departureGate")}
+                          </TableCell>
+                          <TableCell>
+                            {renderCellValue(flight, "arrivalGate")}
+                          </TableCell>
+                          <TableCell>
+                            {renderCellValue(flight, "scheduledDepartureUTC")}
+                          </TableCell>
+                          <TableCell>
+                            {renderCellValue(flight, "scheduledArrivalUTC")}
+                          </TableCell>
+                          <TableCell>
+                            {renderCellValue(flight, "estimatedDepartureUTC")}
+                          </TableCell>
+                          <TableCell>
+                            {renderCellValue(flight, "estimatedArrivalUTC")}
+                          </TableCell>
+                          <TableCell>
+                            {renderCellValue(flight, "actualDepartureUTC")}
+                          </TableCell>
+                          <TableCell>
+                            {renderCellValue(flight, "actualArrivalUTC")}
+                          </TableCell>
+                          <TableCell>
+                            {renderCellValue(flight, "bagClaim")}
+                          </TableCell>
+                          <TableCell>
+                            <span
+                              className={`px-2 py-1 rounded-md text-xs font-medium ${
+                                flight.source === "api"
+                                  ? "bg-blue-100 text-blue-800"
+                                  : "bg-green-100 text-green-800"
+                              }`}
+                            >
+                              {flight.source === "api" ? "API" : "Blockchain"}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      colSpan={19}
+                      className="text-center py-8 text-muted-foreground"
+                    >
+                      No flight data available
                     </TableCell>
-                    <TableCell>
-                      {renderCellValue(flight, "arrivalGate")}
-                    </TableCell>
-                    <TableCell>
-                      {renderCellValue(flight, "scheduledDepartureUTC")}
-                    </TableCell>
-                    <TableCell>
-                      {renderCellValue(flight, "scheduledArrivalUTC")}
-                    </TableCell>
-                    <TableCell>
-                      {renderCellValue(flight, "estimatedDepartureUTC")}
-                    </TableCell>
-                    <TableCell>
-                      {renderCellValue(flight, "estimatedArrivalUTC")}
-                    </TableCell>
-                    <TableCell>
-                      {renderCellValue(flight, "actualDepartureUTC")}
-                    </TableCell>
-                    <TableCell>
-                      {renderCellValue(flight, "actualArrivalUTC")}
-                    </TableCell>
-                    <TableCell>{renderCellValue(flight, "bagClaim")}</TableCell>
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={18}
-                    className="text-center py-8 text-muted-foreground"
-                  >
-                    No flight data available
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </ScrollArea>
+                )}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </div>
       </div>
-    </div>
+    </DecryptionContext.Provider>
   );
 }

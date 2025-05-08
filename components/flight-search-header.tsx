@@ -56,7 +56,6 @@ export function FlightSearchHeader({
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  // Set default dates on component mount
   useEffect(() => {
     setStartDate(startOfDay(new Date()));
     setEndDate(endOfDay(new Date()));
@@ -91,17 +90,33 @@ export function FlightSearchHeader({
         endDate: endDate || null,
       };
 
-      // Call the search API
-      const response = await fetch(
-        `${getBaseUrl()}/fetch-historical-data/search`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(searchParams),
-        }
-      );
+      const fromDateParam = startDate
+        ? `fromDate=${formatDateForAPI(startDate)}`
+        : "";
+      const toDateParam = endDate ? `toDate=${formatDateForAPI(endDate)}` : "";
+
+      let url = `${getBaseUrl()}/flights/fetch-historical/${flightNumber}/date-range?`;
+
+      if (fromDateParam) {
+        url += fromDateParam;
+      }
+
+      if (toDateParam) {
+        url += fromDateParam ? `&${toDateParam}` : toDateParam;
+      }
+
+      url +=
+        fromDateParam || toDateParam
+          ? `&carrierCode=${carrierCode}`
+          : `carrierCode=${carrierCode}`;
+
+      // Call the search API with proper GET method
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
 
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
@@ -112,9 +127,12 @@ export function FlightSearchHeader({
       // Pass the search parameters to the parent component
       onSearch(searchParams);
 
+      // Check if flightDetails exists in the response
+      const resultsCount = data.flightDetails ? data.flightDetails.length : 0;
+
       toast({
         title: "Search Completed",
-        description: `Found ${data.results.length} flights matching your criteria`,
+        description: `Found ${resultsCount} flights matching your criteria`,
       });
     } catch (error) {
       console.error("Error searching flights:", error);
@@ -126,6 +144,10 @@ export function FlightSearchHeader({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const formatDateForAPI = (date: Date): string => {
+    return date.toISOString().split("T")[0];
   };
 
   const exportToExcel = () => {
@@ -200,22 +222,15 @@ export function FlightSearchHeader({
     }
 
     try {
-      // Create PDF document
       const doc = new jsPDF("landscape");
-
-      // Add title
       doc.setFontSize(18);
       doc.text("Flight Data Report", 14, 22);
-
-      // Add timestamp
       doc.setFontSize(10);
       doc.text(
         `Generated: ${format(new Date(), "yyyy-MM-dd HH:mm:ss")}`,
         14,
         30
       );
-
-      // Prepare table data
       const tableColumn = [
         "Txn DTM",
         "Carrier",
@@ -244,7 +259,6 @@ export function FlightSearchHeader({
         flight.bagClaim || "TBD",
       ]);
 
-      // Add table to document
       (doc as any).autoTable({
         head: [tableColumn],
         body: tableRows,
@@ -261,7 +275,6 @@ export function FlightSearchHeader({
         },
       });
 
-      // Save PDF
       const fileName = `flight_data_${format(
         new Date(),
         "yyyy-MM-dd_HH-mm-ss"
@@ -285,9 +298,7 @@ export function FlightSearchHeader({
   return (
     <div className="bg-white dark:bg-gray-800 p-4 rounded-md shadow mb-4">
       <div className="flex flex-col md:flex-row justify-between gap-4">
-        {/* Left side: Search fields */}
         <div className="flex flex-col md:flex-row gap-4 md:items-end flex-1">
-          {/* Carrier Code Input */}
           <div className="space-y-2 w-full md:w-24">
             <Label htmlFor="carrierCode">
               Carrier <span className="text-red-500">*</span>
@@ -303,7 +314,6 @@ export function FlightSearchHeader({
             />
           </div>
 
-          {/* Flight Number Input */}
           <div className="space-y-2 w-full md:w-32">
             <Label htmlFor="flightNumber">
               Flight Number <span className="text-red-500">*</span>
@@ -318,7 +328,6 @@ export function FlightSearchHeader({
             />
           </div>
 
-          {/* Start Date */}
           <div className="space-y-2 w-full md:w-40">
             <Label>From Date</Label>
             <Popover>
@@ -342,7 +351,6 @@ export function FlightSearchHeader({
             </Popover>
           </div>
 
-          {/* End Date */}
           <div className="space-y-2 w-full md:w-40">
             <Label>To Date</Label>
             <Popover>
@@ -366,7 +374,6 @@ export function FlightSearchHeader({
             </Popover>
           </div>
 
-          {/* Search Button */}
           <div className="w-full md:w-auto">
             <Button onClick={handleSearch} disabled={isLoading}>
               {isLoading ? "Searching..." : "Search Flights"}
@@ -374,7 +381,6 @@ export function FlightSearchHeader({
           </div>
         </div>
 
-        {/* Right side: Time Format Toggle and Export Buttons */}
         <div className="flex items-end space-x-2">
           <div className="space-y-2">
             <Label>Time Display Format</Label>
@@ -395,7 +401,6 @@ export function FlightSearchHeader({
             </Select>
           </div>
 
-          {/* Export Buttons */}
           <div className="space-y-2">
             <Label>Export Data</Label>
             <div className="flex space-x-2">
