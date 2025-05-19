@@ -13,10 +13,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TransactionLog } from "@/components/transaction-log";
 import { ConnectionStatus } from "@/components/connection-status";
 import { CombinedFlightTable } from "@/components/combined-flight-table";
+import { FlightSearchResults } from "@/components/flight-search-results";
 import { CONTRACT_ABI } from "@/lib/contract-abi";
 import { CONTRACT_ADDRESS, WS_PROVIDER_URL } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
-import { Bell, Plane } from "lucide-react";
+import { Bell, Plane, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export function Dashboard() {
@@ -30,6 +31,7 @@ export function Dashboard() {
   const [newEventsCount, setNewEventsCount] = useState(0);
   const [newTxCount, setNewTxCount] = useState(0);
   const [activeTab, setActiveTab] = useState("combined");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -180,6 +182,13 @@ export function Dashboard() {
     }
   };
 
+  const handleSearchResults = (results: any[]) => {
+    setSearchResults(results);
+    if (results.length > 0) {
+      setActiveTab("search");
+    }
+  };
+
   return (
     <div className="mx-auto px-3 p-4">
       <div className="flex flex-col space-y-4">
@@ -193,6 +202,18 @@ export function Dashboard() {
               <Plane className="mr-2 h-4 w-4" />
               Flight Data
             </TabsTrigger>
+            {/* <TabsTrigger value="search" className="relative">
+              <Search className="mr-2 h-4 w-4" />
+              Flight Search
+              {searchResults.length > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="ml-2 h-5 w-5 p-0 flex items-center justify-center"
+                >
+                  {searchResults.length}
+                </Badge>
+              )}
+            </TabsTrigger> */}
             <TabsTrigger value="transactions" className="relative">
               Transactions
               {newTxCount > 0 && (
@@ -208,6 +229,30 @@ export function Dashboard() {
 
           <TabsContent value="combined">
             <CombinedFlightTable events={events} />
+          </TabsContent>
+
+          <TabsContent value="search">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Flight Search</CardTitle>
+                    <CardDescription>
+                      Search for historical flight data by date range
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Search className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                      {searchResults.length} results
+                    </span>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <FlightSearchResults onDataFetched={handleSearchResults} />
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="transactions">

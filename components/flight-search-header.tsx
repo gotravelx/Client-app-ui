@@ -61,95 +61,6 @@ export function FlightSearchHeader({
     setEndDate(endOfDay(new Date()));
   }, []);
 
-  const handleSearch = async () => {
-    if (!carrierCode) {
-      toast({
-        title: "Carrier Code Required",
-        description: "Please enter a carrier code",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!flightNumber) {
-      toast({
-        title: "Flight Number Required",
-        description: "Please enter a flight number",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      const searchParams: SearchParams = {
-        flightNumber,
-        carrierCode,
-        startDate: startDate || null,
-        endDate: endDate || null,
-      };
-
-      const fromDateParam = startDate
-        ? `fromDate=${formatDateForAPI(startDate)}`
-        : "";
-      const toDateParam = endDate ? `toDate=${formatDateForAPI(endDate)}` : "";
-
-      let url = `${getBaseUrl()}/flights/fetch-historical/${flightNumber}/date-range?`;
-
-      if (fromDateParam) {
-        url += fromDateParam;
-      }
-
-      if (toDateParam) {
-        url += fromDateParam ? `&${toDateParam}` : toDateParam;
-      }
-
-      url +=
-        fromDateParam || toDateParam
-          ? `&carrierCode=${carrierCode}`
-          : `carrierCode=${carrierCode}`;
-
-      // Call the search API with proper GET method
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      // Pass the search parameters to the parent component
-      onSearch(searchParams);
-
-      // Check if flightDetails exists in the response
-      const resultsCount = data.flightDetails ? data.flightDetails.length : 0;
-
-      toast({
-        title: "Search Completed",
-        description: `Found ${resultsCount} flights matching your criteria`,
-      });
-    } catch (error) {
-      console.error("Error searching flights:", error);
-      toast({
-        title: "Search Failed",
-        description: "Failed to search flights. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const formatDateForAPI = (date: Date): string => {
-    return date.toISOString().split("T")[0];
-  };
-
   const exportToExcel = () => {
     if (flightData.length === 0) {
       toast({
@@ -375,9 +286,7 @@ export function FlightSearchHeader({
           </div>
 
           <div className="w-full md:w-auto">
-            <Button onClick={handleSearch} disabled={isLoading}>
-              {isLoading ? "Searching..." : "Search Flights"}
-            </Button>
+            <Button>{isLoading ? "Searching..." : "Search Flights"}</Button>
           </div>
         </div>
 
@@ -386,7 +295,7 @@ export function FlightSearchHeader({
             <Label>Time Display Format</Label>
             <Select
               value={timeFormat}
-              onValueChange={(value) =>
+              onValueChange={(value: "utc" | "local") =>
                 onTimeFormatChange(value as "utc" | "local")
               }
             >

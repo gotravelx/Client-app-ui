@@ -4,9 +4,7 @@ export const getBaseUrl = () => {
 
     if (hostname.includes("dev")) {
       return "https://dev.gotravelx.com/Chain4Travel/flifo/api/v1"
-    } else if (hostname.includes("prd")) {
-      return "https://gotravelx.com/Chain4Travel/flifo/api/v1"
-    } else {
+    }  else if(hostname.includes("localhost")) {
       return "http://localhost:3000/v1"
     }
   } else {
