@@ -13,7 +13,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Lock, Unlock, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getBaseUrl } from "@/utils/base_url";
-import { FlightSearchHeader, type SearchParams } from "./flight-search-header";
 import {
   Tooltip,
   TooltipContent,
@@ -21,9 +20,15 @@ import {
   TooltipTrigger,
 } from "./ui/tooltip";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { decryptFlightData } from "@/utils/api";
 
 interface CombinedFlightTableProps {
   events: Array<{ [key: string]: any }>;
+  searchResults?: any[];
+  isSearchMode?: boolean;
+  currentSearchParams?: SearchParams | null;
+  onClearSearch?: () => void;
+  onSearchResults?: (results: any[], searchParams: SearchParams | null) => void;
 }
 
 type FlightData = {
@@ -452,7 +457,14 @@ const determineFlightStatusCode = (flight: FlightData): string => {
   }
 };
 
-export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
+export function CombinedFlightTable({
+  events,
+  searchResults = [],
+  isSearchMode = false,
+  currentSearchParams = null,
+  onClearSearch,
+  onSearchResults,
+}: CombinedFlightTableProps) {
   const [flightEvents, setFlightEvents] = useState<FlightData[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<FlightData[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -913,26 +925,11 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
       const data = await response.json();
       console.log("API Response:", data);
 
-      if (!data.flightDetails || data.flightDetails.length === 0) {
-        toast({
-          title: "No historical data found",
-          description:
-            "No historical flight data was found for the specified criteria.",
-          variant: "destructive",
-        });
-        return [];
-      }
-
-      // Process the API response into FlightData objects
       const apiFlightData: FlightData[] = data.flightDetails.map(
         (flightDetail: any, index: number) => {
           const timestamp = new Date();
-          timestamp.setHours(timestamp.getHours() - index); // Stagger timestamps for display
-
-          // Create a unique ID for this flight
+          timestamp.setHours(timestamp.getHours() - index);
           const flightId = `api-${flightDetail.flightNumber}-${flightDetail.scheduledDepartureDate}-${index}`;
-
-          console.log(`Processing API flight: ${flightId}`, flightDetail);
 
           const flightData: FlightData = {
             eventId: flightId,
@@ -965,6 +962,7 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
             arrivalDelayMinutes: "",
             outUtc: "",
             offUtc: "",
+            onUtc: flightDetail.status?.onUtc || "", // Added onUtc property
             inUtc: "",
             events: [],
             encryptedData: {},
@@ -973,7 +971,6 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
             source: "api",
           };
 
-          // Collect encrypted data from the API response
           const collectEncryptedData = (obj: any, prefix = "") => {
             if (!obj) return;
 
@@ -1199,7 +1196,7 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
             .split("T")[0];
           const endDateStr = searchParams.endDate.toISOString().split("T")[0];
 
-          apiFlights = await fetchHistoricalFlightData(
+          apiFlights = await fetchFlightDataFromAPI(
             searchParams.flightNumber,
             searchParams.carrierCode,
             startDateStr,
@@ -1241,6 +1238,11 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
         console.log("Final sorted flights to display:", sortedFlights);
         setFilteredEvents(sortedFlights);
 
+        // Notify parent component about search results
+        if (onSearchResults) {
+          onSearchResults(sortedFlights, searchParams);
+        }
+
         // Show toast with results
         toast({
           title: "Search completed",
@@ -1257,8 +1259,227 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
         setIsLoading(false);
       }
     },
-    [flightEvents, getDecryptedFlights]
+    [flightEvents, getDecryptedFlights, onSearchResults, toast]
   );
+
+  // Add a new function to fetch flight data from API
+  const fetchFlightDataFromAPI = async (
+    flightNumber: string,
+    carrierCode: string,
+    startDate: string,
+    endDate: string
+  ): Promise<FlightData[]> => {
+    try {
+      const data = await fetchHistoricalFlightData(
+        flightNumber,
+        carrierCode,
+        startDate,
+        endDate
+      );
+
+      // Process the API response into FlightData objects
+      const apiFlightData: FlightData[] = data.flightDetails.map(
+        (flightDetail: any, index: number) => {
+          const timestamp = new Date();
+          timestamp.setHours(timestamp.getHours() - index); // Stagger timestamps for display
+
+          // Create a unique ID for this flight
+          const flightId = `api-${flightDetail.flightNumber}-${flightDetail.scheduledDepartureDate}-${index}`;
+
+          console.log(`Processing API flight: ${flightId}`, flightDetail);
+
+          const flightData: FlightData = {
+            eventId: flightId,
+            timestamp: timestamp.toISOString(),
+            flightNumber: flightDetail.flightNumber,
+            carrierCode: flightDetail.carrierCode,
+            scheduledDepartureDate: flightDetail.scheduledDepartureDate,
+            departureCity: flightDetail.departureCity || "",
+            arrivalCity: flightDetail.arrivalCity || "",
+            departureAirport: flightDetail.departureAirport || "",
+            arrivalAirport: flightDetail.arrivalAirport || "",
+            departureGate: flightDetail.departureGate || "",
+            arrivalGate: flightDetail.arrivalGate || "",
+            operatingAirlineCode: flightDetail.operatingAirlineCode || "",
+            equipmentModel: flightDetail.equipmentModel || "",
+            flightStatus:
+              flightDetail.flightStatus || flightDetail.currentStatus || "",
+            flightStatusCode: flightDetail.status?.statusCode || "",
+            currentFlightStatusTime: "",
+            DepartureState: flightDetail.status?.departureState || "",
+            ArrivalState: flightDetail.status?.arrivalState || "",
+            bagClaim: flightDetail.utcTimes?.bagClaim || "",
+            scheduledDepartureUTC: "",
+            scheduledArrivalUTC: "",
+            estimatedDepartureUTC: "",
+            estimatedArrivalUTC: "",
+            actualDepartureUTC: "",
+            actualArrivalUTC: "",
+            departureDelayMinutes: "",
+            arrivalDelayMinutes: "",
+            outUtc: "",
+            offUtc: "",
+            inUtc: "",
+            events: [],
+            encryptedData: {},
+            decryptedData: {},
+            isDecrypting: false,
+            source: "api",
+          };
+
+          // Collect encrypted data from the API response
+          const collectEncryptedData = (obj: any, prefix = "") => {
+            if (!obj) return;
+
+            Object.entries(obj).forEach(([key, value]) => {
+              const fullKey = prefix ? `${prefix}.${key}` : key;
+
+              if (
+                typeof value === "string" &&
+                isLikelyEncrypted(value as string)
+              ) {
+                if (!flightData.encryptedData[fullKey]) {
+                  flightData.encryptedData[fullKey] = [];
+                }
+                flightData.encryptedData[fullKey].push(value as string);
+
+                // Also store encrypted values directly in the corresponding fields
+                if (key === "departureCity")
+                  flightData.departureCity = value as string;
+                if (key === "arrivalCity")
+                  flightData.arrivalCity = value as string;
+                if (key === "departureGate")
+                  flightData.departureGate = value as string;
+                if (key === "arrivalGate")
+                  flightData.arrivalGate = value as string;
+                if (key === "flightStatus")
+                  flightData.flightStatus = value as string;
+                if (key === "equipmentModel")
+                  flightData.equipmentModel = value as string;
+                if (key === "operatingAirlineCode")
+                  flightData.operatingAirlineCode = value as string;
+              } else if (typeof value === "object" && value !== null) {
+                collectEncryptedData(value, fullKey);
+              }
+            });
+          };
+
+          // Collect encrypted data from the flight detail
+          collectEncryptedData(flightDetail);
+
+          // Process utcTimes if available
+          if (flightDetail.utcTimes) {
+            // Store the encrypted values directly in the corresponding fields
+            flightData.scheduledDepartureUTC =
+              flightDetail.utcTimes.scheduledDeparture || "";
+            flightData.scheduledArrivalUTC =
+              flightDetail.utcTimes.scheduledArrival || "";
+            flightData.estimatedDepartureUTC =
+              flightDetail.utcTimes.estimatedDeparture || "";
+            flightData.estimatedArrivalUTC =
+              flightDetail.utcTimes.estimatedArrival || "";
+            flightData.actualDepartureUTC =
+              flightDetail.utcTimes.actualDeparture || "";
+            flightData.actualArrivalUTC =
+              flightDetail.utcTimes.actualArrival || "";
+            flightData.departureDelayMinutes =
+              flightDetail.utcTimes.departureDelayMinutes || "";
+            flightData.arrivalDelayMinutes =
+              flightDetail.utcTimes.arrivalDelayMinutes || "";
+            flightData.bagClaim = flightDetail.utcTimes.bagClaim || "";
+
+            collectEncryptedData(flightDetail.utcTimes, "utcTimes");
+          }
+
+          // Process status if available
+          if (flightDetail.status) {
+            flightData.flightStatusCode = flightDetail.status.statusCode || "";
+            flightData.DepartureState =
+              flightDetail.status.departureState || "";
+            flightData.ArrivalState = flightDetail.status.arrivalState || "";
+            flightData.outUtc = flightDetail.status.outUtc || "";
+            flightData.offUtc = flightDetail.status.offUtc || "";
+            flightData.onUtc = flightDetail.status.onUtc || "";
+            flightData.inUtc = flightDetail.status.inUtc || "";
+
+            collectEncryptedData(flightDetail.status, "status");
+          }
+
+          return flightData;
+        }
+      );
+
+      console.log("Processed API Flight Data:", apiFlightData);
+
+      // Collect all encrypted values for decryption
+      const allEncryptedValues: string[] = [];
+      apiFlightData.forEach((flight) => {
+        Object.values(flight.encryptedData).forEach((values) => {
+          values.forEach((value) => {
+            if (!allEncryptedValues.includes(value)) {
+              allEncryptedValues.push(value);
+            }
+          });
+        });
+      });
+
+      console.log("Encrypted values to decrypt:", allEncryptedValues);
+
+      // If there are encrypted values, decrypt them
+      if (allEncryptedValues.length > 0) {
+        setIsDecrypting(true);
+
+        try {
+          const decryptData = await decryptFlightData(allEncryptedValues);
+
+          // Create a mapping of encrypted to decrypted values
+          const newDecryptedMap: Record<string, string> = { ...decryptedMap };
+          allEncryptedValues.forEach((encrypted, index) => {
+            if (decryptData.decryptedData[index]) {
+              newDecryptedMap[encrypted] = decryptData.decryptedData[index];
+            }
+          });
+
+          // Update the decryption map
+          setDecryptedMap(newDecryptedMap);
+
+          toast({
+            title: "Decryption successful",
+            description: `Successfully decrypted ${
+              Object.keys(newDecryptedMap).length -
+              Object.keys(decryptedMap).length
+            } new values from historical data.`,
+          });
+        } catch (apiError) {
+          console.error("Error decrypting historical data:", apiError);
+          toast({
+            title: "Decryption failed",
+            description: "Failed to decrypt historical flight data.",
+            variant: "destructive",
+          });
+        } finally {
+          setIsDecrypting(false);
+        }
+      }
+
+      return apiFlightData;
+    } catch (error) {
+      console.error("Error fetching historical flight data:", error);
+      setApiError(
+        `Failed to fetch historical flight data: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+      toast({
+        title: "API Error",
+        description: `Failed to fetch historical flight data: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+        variant: "destructive",
+      });
+      return [];
+    }
+  };
 
   // Collect encrypted values from all flights - do this once
   const collectEncryptedValues = useCallback(() => {
@@ -1758,21 +1979,6 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
           }
         `}</style>
 
-        {/* Search Header */}
-        <FlightSearchHeader
-          onTimeFormatChange={setTimeFormat}
-          timeFormat={timeFormat}
-          onSearch={handleSearch}
-          flightData={filteredEvents}
-        />
-
-        {apiError && (
-          <Alert variant="destructive" className="mb-4">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{apiError}</AlertDescription>
-          </Alert>
-        )}
-
         <div className="flight-table-container">
           <ScrollArea className="h-[600px] w-full">
             <Table>
@@ -1832,6 +2038,9 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
                   <TableHead>
                     {renderTableHeaderWithTooltip("Bagclaim")}
                   </TableHead>
+                  <TableHead>
+                    {renderTableHeaderWithTooltip("Source")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1840,6 +2049,9 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
                     .fill(0)
                     .map((_, index) => (
                       <TableRow key={`skeleton-${index}`}>
+                        <TableCell>
+                          <CellSkeleton />
+                        </TableCell>
                         <TableCell>
                           <CellSkeleton />
                         </TableCell>
@@ -1944,7 +2156,6 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
                           }`}
                         >
                           <TableCell className="txn-dtm-cell">
-                            {/* {flight.timestamp} */}
                             {renderCellValue(flight, "timestamp")}
                           </TableCell>
                           <TableCell>
@@ -2062,16 +2273,21 @@ export function CombinedFlightTable({ events }: CombinedFlightTableProps) {
                           <TableCell>
                             {renderCellValue(flight, "bagClaim")}
                           </TableCell>
+                          <TableCell>
+                            {renderCellValue(flight, "source")}
+                          </TableCell>
                         </TableRow>
                       );
                     })
                 ) : (
                   <TableRow>
                     <TableCell
-                      colSpan={19}
+                      colSpan={20}
                       className="text-center py-8 text-muted-foreground"
                     >
-                      No flight data available
+                      {isSearchMode
+                        ? "No flight data found matching your search criteria"
+                        : "No flight data available. Use the search above to find historical flight data."}
                     </TableCell>
                   </TableRow>
                 )}

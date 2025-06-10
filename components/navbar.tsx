@@ -9,7 +9,7 @@ export function Navbar() {
   };
 
   return (
-    <div className="border-b  px-4 bg-background dark:bg-background-dark">
+    <div className="border-b px-4 bg-background dark:bg-background-dark sticky top-0 z-50 backdrop-blur-sm dark:bg-gray-900/95">
       <div className="flex h-16 items-center">
         <div className="flex items-center gap-2 mr-4">
           <Plane className="h-6 w-6 text-primary" />
