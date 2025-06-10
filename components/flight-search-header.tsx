@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,15 +11,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar, Clock, FileDown, FileSpreadsheet } from "lucide-react";
+import {
+  Calendar,
+  Clock,
+  FileDown,
+  FileSpreadsheet,
+  X,
+  ChevronDown,
+  ChevronUp,
+  Search,
+} from "lucide-react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { format, startOfDay, endOfDay } from "date-fns";
-import { getBaseUrl } from "@/utils/base_url";
+import { format, startOfDay, endOfDay, subMonths } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -29,7 +37,10 @@ interface FlightSearchHeaderProps {
   onTimeFormatChange: (format: "utc" | "local") => void;
   timeFormat: "utc" | "local";
   onSearch: (params: SearchParams) => void;
+  onClearSearch?: () => void;
   flightData: any[];
+  isSearchMode?: boolean;
+  currentSearchParams?: SearchParams | null;
 }
 
 export interface SearchParams {
@@ -43,38 +54,47 @@ export function FlightSearchHeader({
   onTimeFormatChange,
   timeFormat,
   onSearch,
+  onClearSearch,
   flightData,
+  isSearchMode = false,
+  currentSearchParams = null,
 }: FlightSearchHeaderProps) {
   const [flightNumber, setFlightNumber] = useState("");
   const [carrierCode, setCarrierCode] = useState("");
-  const [startDate, setStartDate] = useState<Date | undefined>(
+  const [startDate, setStartDate] = useState<Date | null>(
     startOfDay(new Date())
   );
-  const [endDate, setEndDate] = useState<Date | undefined>(
-    endOfDay(new Date())
-  );
+  const [endDate, setEndDate] = useState<Date | null>(endOfDay(new Date()));
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const thirtyMonthsAgo = useMemo(() => subMonths(new Date(), 30), []);
+  const today = useMemo(() => new Date(), []);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+
+  // Update form fields if currentSearchParams changes
+  useEffect(() => {
+    if (currentSearchParams) {
+      setFlightNumber(currentSearchParams.flightNumber || "");
+      setCarrierCode(currentSearchParams.carrierCode || "");
+      if (currentSearchParams.startDate) {
+        setStartDate(currentSearchParams.startDate);
+      }
+      if (currentSearchParams.endDate) {
+        setEndDate(currentSearchParams.endDate);
+      }
+    }
+  }, [currentSearchParams]);
 
   useEffect(() => {
     setStartDate(startOfDay(new Date()));
     setEndDate(endOfDay(new Date()));
   }, []);
 
-  const handleSearch = async () => {
-    if (!carrierCode) {
+  const handleSearch = () => {
+    if (!flightNumber || !carrierCode) {
       toast({
-        title: "Carrier Code Required",
-        description: "Please enter a carrier code",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!flightNumber) {
-      toast({
-        title: "Flight Number Required",
-        description: "Please enter a flight number",
+        title: "Missing information",
+        description: "Please enter both flight number and carrier code",
         variant: "destructive",
       });
       return;
@@ -82,76 +102,33 @@ export function FlightSearchHeader({
 
     setIsLoading(true);
 
-    try {
-      const searchParams: SearchParams = {
-        flightNumber,
-        carrierCode,
-        startDate: startDate || null,
-        endDate: endDate || null,
-      };
+    const searchParams: SearchParams = {
+      flightNumber,
+      carrierCode,
+      startDate,
+      endDate,
+    };
 
-      const fromDateParam = startDate
-        ? `fromDate=${formatDateForAPI(startDate)}`
-        : "";
-      const toDateParam = endDate ? `toDate=${formatDateForAPI(endDate)}` : "";
+    onSearch(searchParams);
 
-      let url = `${getBaseUrl()}/flights/fetch-historical/${flightNumber}/date-range?`;
-
-      if (fromDateParam) {
-        url += fromDateParam;
-      }
-
-      if (toDateParam) {
-        url += fromDateParam ? `&${toDateParam}` : toDateParam;
-      }
-
-      url +=
-        fromDateParam || toDateParam
-          ? `&carrierCode=${carrierCode}`
-          : `carrierCode=${carrierCode}`;
-
-      // Call the search API with proper GET method
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      // Pass the search parameters to the parent component
-      onSearch(searchParams);
-
-      // Check if flightDetails exists in the response
-      const resultsCount = data.flightDetails ? data.flightDetails.length : 0;
-
-      toast({
-        title: "Search Completed",
-        description: `Found ${resultsCount} flights matching your criteria`,
-      });
-    } catch (error) {
-      console.error("Error searching flights:", error);
-      toast({
-        title: "Search Failed",
-        description: "Failed to search flights. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
+    setTimeout(() => {
       setIsLoading(false);
+    }, 1000);
+  };
+
+  const handleClearSearch = () => {
+    setFlightNumber("");
+    setCarrierCode("");
+    setStartDate(startOfDay(new Date()));
+    setEndDate(endOfDay(new Date()));
+
+    if (onClearSearch) {
+      onClearSearch();
     }
   };
 
-  const formatDateForAPI = (date: Date): string => {
-    return date.toISOString().split("T")[0];
-  };
-
   const exportToExcel = () => {
-    if (flightData.length === 0) {
+    if (!flightData || flightData.length === 0) {
       toast({
         title: "No Data to Export",
         description: "There is no flight data available to export.",
@@ -161,27 +138,44 @@ export function FlightSearchHeader({
     }
 
     try {
-      // Prepare data for export
-      const exportData = flightData.map((flight) => ({
-        "Transaction Date": flight.timestamp,
-        Carrier: flight.carrierCode,
-        "Flight Number": flight.flightNumber,
-        "Departure Station": `${flight.departureCity} (${flight.departureAirport})`,
-        "Departure State": flight.DepartureState,
-        "Arrival Station": `${flight.arrivalCity} (${flight.arrivalAirport})`,
-        "Arrival State": flight.ArrivalState,
-        "Flight Status": flight.flightStatus,
-        "Flight Status Code": flight.flightStatusCode,
-        "Departure Gate": flight.departureGate,
-        "Arrival Gate": flight.arrivalGate,
-        "Scheduled Departure": flight.scheduledDepartureUTC,
-        "Scheduled Arrival": flight.scheduledArrivalUTC,
-        "Estimated Departure": flight.estimatedDepartureUTC,
-        "Estimated Arrival": flight.estimatedArrivalUTC,
-        "Actual Departure": flight.actualDepartureUTC,
-        "Actual Arrival": flight.actualArrivalUTC,
-        "Baggage Claim": flight.bagClaim,
-      }));
+      // Prepare data for export with proper time formatting
+      const exportData = flightData.map((flight) => {
+        const formatTime = (timestamp: string) => {
+          if (!timestamp || timestamp === "TBD") return "TBD";
+          try {
+            const date = new Date(timestamp);
+            return timeFormat === "utc"
+              ? date
+                  .toISOString()
+                  .replace("T", " ")
+                  .replace(/\.\d+Z$/, "Z")
+              : date.toLocaleString("en-US", { hour12: true });
+          } catch {
+            return timestamp;
+          }
+        };
+
+        return {
+          Date: flight.date || extractDateFromTimestamp(flight.timestamp),
+          Carrier: flight.carrierCode || flight.carrier,
+          "Flight Number": flight.flightNumber,
+          Status: flight.statusText || flight.status,
+          "Event Time": formatTime(flight.eventTime || flight.timestamp),
+          "Departure Station":
+            flight.departureCity && flight.departureAirport
+              ? `${flight.departureCity} (${flight.departureAirport})`
+              : flight.departureCity || flight.departureAirport || "TBD",
+          "Departure State": flight.DepartureState || "TBD",
+          "Arrival Station":
+            flight.arrivalCity && flight.arrivalAirport
+              ? `${flight.arrivalCity} (${flight.arrivalAirport})`
+              : flight.arrivalCity || flight.arrivalAirport || "TBD",
+          "Arrival State": flight.ArrivalState || "TBD",
+          "Departure Gate": flight.departureGate || "TBD",
+          "Arrival Gate": flight.arrivalGate || "TBD",
+          "Baggage Claim": flight.bagClaim || "TBD",
+        };
+      });
 
       // Create worksheet
       const worksheet = XLSX.utils.json_to_sheet(exportData);
@@ -193,7 +187,7 @@ export function FlightSearchHeader({
       // Generate Excel file
       const fileName = `flight_data_${format(
         new Date(),
-        "yyyy-MM-dd_HH-mm-ss"
+        "MM-dd-yyyy_HH-mm-ss"
       )}.xlsx`;
       XLSX.writeFile(workbook, fileName);
 
@@ -212,7 +206,7 @@ export function FlightSearchHeader({
   };
 
   const exportToPDF = () => {
-    if (flightData.length === 0) {
+    if (!flightData || flightData.length === 0) {
       toast({
         title: "No Data to Export",
         description: "There is no flight data available to export.",
@@ -227,38 +221,56 @@ export function FlightSearchHeader({
       doc.text("Flight Data Report", 14, 22);
       doc.setFontSize(10);
       doc.text(
-        `Generated: ${format(new Date(), "yyyy-MM-dd HH:mm:ss")}`,
+        `Generated: ${format(new Date(), "MM/dd/yyyy HH:mm:ss")}`,
         14,
         30
       );
+
       const tableColumn = [
-        "Txn DTM",
+        "Date",
         "Carrier",
         "Flight",
+        "Status",
+        "Event Time",
         "Dep Stn",
         "Dep State",
         "Arr Stn",
         "Arr State",
-        "Status",
         "Dep Gate",
         "Arr Gate",
         "Baggage",
       ];
 
+      const formatTime = (timestamp: string) => {
+        if (!timestamp || timestamp === "TBD") return "TBD";
+        try {
+          const date = new Date(timestamp);
+          return timeFormat === "utc"
+            ? date
+                .toISOString()
+                .replace("T", " ")
+                .replace(/\.\d+Z$/, "Z")
+                .substring(0, 16)
+            : date.toLocaleString("en-US", { hour12: true }).substring(0, 16);
+        } catch {
+          return timestamp.substring(0, 16);
+        }
+      };
+
       const tableRows = flightData.map((flight) => [
-        flight.timestamp.substring(0, 16),
-        flight.carrierCode,
+        flight.date || extractDateFromTimestamp(flight.timestamp),
+        flight.carrierCode || flight.carrier,
         flight.flightNumber,
-        flight.departureAirport,
+        flight.statusText || flight.status,
+        formatTime(flight.eventTime || flight.timestamp),
+        flight.departureAirport || "TBD",
         flight.DepartureState || "TBD",
-        flight.arrivalAirport,
+        flight.arrivalAirport || "TBD",
         flight.ArrivalState || "TBD",
-        flight.flightStatus,
         flight.departureGate || "TBD",
         flight.arrivalGate || "TBD",
         flight.bagClaim || "TBD",
       ]);
-
       (doc as any).autoTable({
         head: [tableColumn],
         body: tableRows,
@@ -277,7 +289,7 @@ export function FlightSearchHeader({
 
       const fileName = `flight_data_${format(
         new Date(),
-        "yyyy-MM-dd_HH-mm-ss"
+        "MM-dd-yyyy_HH-mm-ss"
       )}.pdf`;
       doc.save(fileName);
 
@@ -295,135 +307,200 @@ export function FlightSearchHeader({
     }
   };
 
+  const extractDateFromTimestamp = (timestamp: string) => {
+    if (!timestamp) return "";
+    try {
+      return timestamp.split("T")[0];
+    } catch {
+      return timestamp;
+    }
+  };
+
   return (
-    <div className="bg-white dark:bg-gray-800 p-4 rounded-md shadow mb-4">
-      <div className="flex flex-col md:flex-row justify-between gap-4">
-        <div className="flex flex-col md:flex-row gap-4 md:items-end flex-1">
-          <div className="space-y-2 w-full md:w-24">
-            <Label htmlFor="carrierCode">
-              Carrier <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="carrierCode"
-              placeholder="e.g. UA"
-              value={carrierCode}
-              onChange={(e) => setCarrierCode(e.target.value)}
-              maxLength={3}
-              required
-              className="border-red-500 focus:ring-red-500"
-            />
-          </div>
-
-          <div className="space-y-2 w-full md:w-32">
-            <Label htmlFor="flightNumber">
-              Flight Number <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="flightNumber"
-              placeholder="e.g. 1234"
-              value={flightNumber}
-              onChange={(e) => setFlightNumber(e.target.value)}
-              required
-              className="border-red-500 focus:ring-red-500"
-            />
-          </div>
-
-          <div className="space-y-2 w-full md:w-40">
-            <Label>From Date</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start text-left font-normal"
-                >
-                  <Calendar className="mr-2 h-4 w-4" />
-                  {startDate ? format(startDate, "MM/dd/yyyy") : "Select date"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <CalendarComponent
-                  mode="single"
-                  selected={startDate}
-                  onSelect={setStartDate}
-                  initialFocus
+    <div className="bg-white mt-2 dark:bg-gray-800 border rounded-lg shadow-sm sticky top-20 z-40 backdrop-blur-sm bg-white/95 dark:bg-gray-800/95">
+      {!isCollapsed && (
+        <div className="p-4">
+          <div className="flex flex-col  md:flex-row gap-4 md:items-end">
+            <div className="flex flex-col md:flex-row gap-4 md:items-end flex-1">
+              <div className="space-y-2 w-full md:w-24">
+                <Label htmlFor="carrierCode">
+                  Carrier{" "}
+                  <span
+                    className={
+                      carrierCode ? "text-transparent" : "text-red-500"
+                    }
+                  >
+                    *
+                  </span>
+                </Label>
+                <Input
+                  id="carrierCode"
+                  placeholder="e.g. UA"
+                  value={carrierCode}
+                  onChange={(e) => setCarrierCode(e.target.value.toUpperCase())}
+                  maxLength={3}
+                  required
+                  className={
+                    carrierCode ? "" : "border-red-500 focus:ring-red-500"
+                  }
                 />
-              </PopoverContent>
-            </Popover>
-          </div>
+              </div>
 
-          <div className="space-y-2 w-full md:w-40">
-            <Label>To Date</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start text-left font-normal"
-                >
-                  <Calendar className="mr-2 h-4 w-4" />
-                  {endDate ? format(endDate, "MM/dd/yyyy") : "Select date"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <CalendarComponent
-                  mode="single"
-                  selected={endDate}
-                  onSelect={setEndDate}
-                  initialFocus
+              <div className="space-y-2 w-full md:w-32">
+                <Label htmlFor="flightNumber">
+                  Flight Number{" "}
+                  <span
+                    className={
+                      flightNumber ? "text-transparent" : "text-red-500"
+                    }
+                  >
+                    *
+                  </span>
+                </Label>
+                <Input
+                  id="flightNumber"
+                  placeholder="e.g. 1234"
+                  value={flightNumber}
+                  onChange={(e) => setFlightNumber(e.target.value)}
+                  required
+                  className={
+                    flightNumber ? "" : "border-red-500 focus:ring-red-500"
+                  }
                 />
-              </PopoverContent>
-            </Popover>
-          </div>
+              </div>
 
-          <div className="w-full md:w-auto">
-            <Button onClick={handleSearch} disabled={isLoading}>
-              {isLoading ? "Searching..." : "Search Flights"}
-            </Button>
-          </div>
-        </div>
+              <div className="space-y-2 w-full md:w-40">
+                <Label>From Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <Calendar className="mr-2 h-4 w-4" />
+                      {startDate
+                        ? format(startDate, "MM/dd/yyyy")
+                        : "Select date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={startDate || undefined}
+                      onSelect={(day) => setStartDate(day || null)}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
 
-        <div className="flex items-end space-x-2">
-          <div className="space-y-2">
-            <Label>Time Display Format</Label>
-            <Select
-              value={timeFormat}
-              onValueChange={(value) =>
-                onTimeFormatChange(value as "utc" | "local")
-              }
-            >
-              <SelectTrigger className="w-[140px]">
-                <Clock className="mr-2 h-4 w-4" />
-                <SelectValue placeholder="Select format" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="utc">UTC Time</SelectItem>
-                <SelectItem value="local">Local Time</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+              <div className="space-y-2 w-full md:w-40">
+                <Label>To Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <Calendar className="mr-2 h-4 w-4" />
+                      {endDate ? format(endDate, "MM/dd/yyyy") : "Select date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={endDate || undefined}
+                      onSelect={(day) => setEndDate(day || null)}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
 
-          <div className="space-y-2">
-            <Label>Export Data</Label>
-            <div className="flex space-x-2">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={exportToExcel}
-                title="Export to Excel"
-              >
-                <FileSpreadsheet className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={exportToPDF}
-                title="Export to PDF"
-              >
-                <FileDown className="h-4 w-4" />
-              </Button>
+              <div className="w-full md:w-auto flex gap-2">
+                <Button
+                  onClick={handleSearch}
+                  disabled={isLoading}
+                  className="flex items-center gap-2"
+                >
+                  <Search className="h-4 w-4" />
+                  {isLoading ? "Searching..." : "Search Flights"}
+                </Button>
+
+                {isSearchMode && (
+                  <Button variant="outline" onClick={handleClearSearch}>
+                    <X className="h-4 w-4 mr-1" />
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-end space-x-2">
+              <div className="space-y-2">
+                <Label>Time Display Format</Label>
+                <Select
+                  value={timeFormat}
+                  onValueChange={(value: "utc" | "local") => {
+                    console.log("Time format changed to:", value);
+                    onTimeFormatChange(value);
+                  }}
+                >
+                  <SelectTrigger className="w-[140px]">
+                    <Clock className="mr-2 h-4 w-4" />
+                    <SelectValue placeholder="Select format" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="utc">UTC Time</SelectItem>
+                    <SelectItem value="local">Local Time</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Export Data</Label>
+                <div className="flex space-x-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={exportToExcel}
+                    title="Export to Excel"
+                    disabled={!flightData || flightData.length === 0}
+                  >
+                    <FileSpreadsheet className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={exportToPDF}
+                    title="Export to PDF"
+                    disabled={!flightData || flightData.length === 0}
+                  >
+                    <FileDown className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
+
+          {isSearchMode && (
+            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/50 rounded-md border border-blue-200 dark:border-blue-800">
+              <p className="text-sm text-blue-700 dark:text-blue-200">
+                Showing search results for flight{" "}
+                <strong>{currentSearchParams?.flightNumber}</strong> with
+                carrier <strong>{currentSearchParams?.carrierCode}</strong> from{" "}
+                {currentSearchParams?.startDate
+                  ? format(currentSearchParams.startDate, "MM/dd/yyyy")
+                  : ""}{" "}
+                to{" "}
+                {currentSearchParams?.endDate
+                  ? format(currentSearchParams.endDate, "MM/dd/yyyy")
+                  : ""}
+              </p>
+            </div>
+          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

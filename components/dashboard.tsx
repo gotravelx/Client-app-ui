@@ -13,13 +13,27 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TransactionLog } from "@/components/transaction-log";
 import { ConnectionStatus } from "@/components/connection-status";
 import { CombinedFlightTable } from "@/components/combined-flight-table";
+
 import { CONTRACT_ABI } from "@/lib/contract-abi";
 import { CONTRACT_ADDRESS, WS_PROVIDER_URL } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
-import { Bell, Plane } from "lucide-react";
+import { Bell, Plane, RefreshCcwDotIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { fetchHistoricalFlightData } from "@/utils/api";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
+import { ApiFlightTable } from "./historical-flight-table";
+import { FlightSearchHeader } from "./flight-search-header";
 
-export function Dashboard() {
+// Define the SearchParams type
+interface SearchParams {
+  flightNumber: string;
+  carrierCode: string;
+  startDate: Date | null;
+  endDate: Date | null;
+}
+
+export default function Dashboard() {
   const [provider, setProvider] = useState<ethers.WebSocketProvider | null>(
     null
   );
@@ -30,6 +44,14 @@ export function Dashboard() {
   const [newEventsCount, setNewEventsCount] = useState(0);
   const [newTxCount, setNewTxCount] = useState(0);
   const [activeTab, setActiveTab] = useState("combined");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [currentSearchParams, setCurrentSearchParams] =
+    useState<SearchParams | null>(null);
+  const [apiData, setApiData] = useState<any>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [timeFormat, setTimeFormat] = useState<"utc" | "local">("utc");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -41,11 +63,8 @@ export function Dashboard() {
   useEffect(() => {
     const connectToBlockchain = async () => {
       try {
-        // Connect to Camino Network WebSocket provider
         const wsProvider = new ethers.WebSocketProvider(WS_PROVIDER_URL);
         setProvider(wsProvider);
-
-        // Create contract instance
         const flightContract = new ethers.Contract(
           CONTRACT_ADDRESS,
           CONTRACT_ABI,
@@ -53,8 +72,6 @@ export function Dashboard() {
         );
         setContract(flightContract);
         setIsConnected(true);
-
-        // Listen for all events from the contract
         flightContract.on("FlightDataSet", (...args) => {
           const event = args[args.length - 1];
           const newEvent = {
@@ -65,7 +82,6 @@ export function Dashboard() {
           console.log("FlightDataSet event received:", newEvent);
           setEvents((prev) => [newEvent, ...prev]);
 
-          // Show toast notification
           toast({
             title: "New Flight Data",
             description: `Flight ${event.args.flightNumber} data has been updated`,
@@ -82,7 +98,6 @@ export function Dashboard() {
           console.log("FlightStatusUpdate event received:", newEvent);
           setEvents((prev) => [newEvent, ...prev]);
 
-          // Show toast notification
           toast({
             title: "Flight Status Update",
             description: `Flight ${event.args.flightNumber} status updated`,
@@ -98,8 +113,6 @@ export function Dashboard() {
           };
           console.log("SubscriptionDetails event received:", newEvent);
           setEvents((prev) => [newEvent, ...prev]);
-
-          // Show toast notification
           toast({
             title: "Subscription Update",
             description: `User ${event.args.user.substring(0, 6)}... ${
@@ -108,7 +121,6 @@ export function Dashboard() {
           });
         });
 
-        // Listen for transactions to the contract
         wsProvider.on("pending", (tx) => {
           wsProvider.getTransaction(tx).then((transaction) => {
             if (
@@ -128,7 +140,6 @@ export function Dashboard() {
                 setNewTxCount((prev) => prev + 1);
               }
 
-              // Show toast notification
               toast({
                 title: "New Transaction",
                 description: `Transaction ${transaction.hash.substring(
@@ -152,7 +163,6 @@ export function Dashboard() {
         console.error("Failed to connect to Camino Network:", error);
         setIsConnected(false);
 
-        // Show error toast
         toast({
           title: "Connection Error",
           description: "Failed to connect to Camino Network",
@@ -180,6 +190,81 @@ export function Dashboard() {
     }
   };
 
+  const handleSearchResults = (
+    results: any[],
+    searchParams: SearchParams | null
+  ) => {
+    setSearchResults(results);
+    setCurrentSearchParams(searchParams);
+
+    if (results.length > 0) {
+      setIsSearchMode(true);
+    } else {
+      setIsSearchMode(false);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setIsSearchMode(false);
+    setSearchResults([]);
+    setCurrentSearchParams(null);
+    setApiData(null);
+    setApiError(null);
+  };
+
+  const handleSearch = async (searchParams: SearchParams) => {
+    setIsLoading(true);
+    setApiError(null);
+    setApiData(null);
+
+    try {
+      if (
+        searchParams.flightNumber &&
+        searchParams.carrierCode &&
+        searchParams.startDate &&
+        searchParams.endDate
+      ) {
+        const startDateStr = searchParams.startDate.toISOString().split("T")[0];
+        const endDateStr = searchParams.endDate.toISOString().split("T")[0];
+
+        const data = await fetchHistoricalFlightData(
+          searchParams.flightNumber,
+          searchParams.carrierCode,
+          startDateStr,
+          endDateStr
+        );
+
+        setApiData(data);
+        setCurrentSearchParams(searchParams);
+        setIsSearchMode(true);
+
+        if (data.flightDetails === "Flight does not exist") {
+          setApiError(
+            `Flight ${searchParams.flightNumber} with carrier ${searchParams.carrierCode} does not exist in the specified date range.`
+          );
+        } else {
+          toast({
+            title: "Flight Data Retrieved",
+            description: `Successfully retrieved flight data for ${searchParams.carrierCode} ${searchParams.flightNumber}`,
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching flight data:", error);
+      setApiError(
+        `Failed to fetch flight data: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTimeFormatChange = (format: "utc" | "local") => {
+    setTimeFormat(format);
+  };
+
   return (
     <div className="mx-auto px-3 p-4">
       <div className="flex flex-col space-y-4">
@@ -188,10 +273,14 @@ export function Dashboard() {
         </div>
 
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="grid max-w-screen-sm grid-cols-2">
+          <TabsList className="grid max-w-screen-sm grid-cols-3">
             <TabsTrigger value="combined" className="relative">
               <Plane className="mr-2 h-4 w-4" />
               Flight Data
+            </TabsTrigger>
+            <TabsTrigger value="flight-history" className="relative">
+              <RefreshCcwDotIcon className="mr-2 h-4 w-4" />
+              Flight History
             </TabsTrigger>
             <TabsTrigger value="transactions" className="relative">
               Transactions
@@ -207,7 +296,62 @@ export function Dashboard() {
           </TabsList>
 
           <TabsContent value="combined">
-            <CombinedFlightTable events={events} />
+            <CombinedFlightTable
+              events={events}
+              searchResults={searchResults}
+              isSearchMode={isSearchMode}
+              currentSearchParams={currentSearchParams}
+              onClearSearch={handleClearSearch}
+              onSearchResults={handleSearchResults}
+            />
+          </TabsContent>
+
+          <TabsContent value="flight-history">
+            <FlightSearchHeader
+              onTimeFormatChange={handleTimeFormatChange}
+              timeFormat={timeFormat}
+              onSearch={handleSearch}
+              onClearSearch={handleClearSearch}
+              flightData={searchResults}
+              isSearchMode={isSearchMode}
+              currentSearchParams={currentSearchParams}
+            />
+
+            {apiError && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{apiError}</AlertDescription>
+              </Alert>
+            )}
+
+            {isLoading ? (
+              <div className="flex justify-center items-center h-40">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+              </div>
+            ) : (
+              apiData && (
+                <Card className="mt-4">
+                  <CardHeader>
+                    <CardTitle className="text-md font-semibold">
+                      Flight Status Timeline: {currentSearchParams?.carrierCode}{" "}
+                      {currentSearchParams?.flightNumber}
+                    </CardTitle>
+                    <CardDescription>
+                      Showing all the events for flight{" "}
+                      {currentSearchParams?.flightNumber}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ApiFlightTable
+                      apiData={apiData}
+                      timeFormat={timeFormat}
+                      onClearSearch={handleClearSearch}
+                      currentSearchParams={currentSearchParams}
+                    />
+                  </CardContent>
+                </Card>
+              )
+            )}
           </TabsContent>
 
           <TabsContent value="transactions">

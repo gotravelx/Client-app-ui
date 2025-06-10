@@ -566,6 +566,11 @@ export const CONTRACT_ABI =  [
         type: "string",
       },
       {
+        internalType: "uint256",
+        name: "fromDateInTimeStamp",
+        type: "uint256",
+      },
+      {
         internalType: "string",
         name: "toDate",
         type: "string",
@@ -813,6 +818,30 @@ export const CONTRACT_ABI =  [
     name: "insertFlightDetails",
     outputs: [],
     stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "string",
+        name: "date1",
+        type: "string",
+      },
+      {
+        internalType: "string",
+        name: "date2",
+        type: "string",
+      },
+    ],
+    name: "isDateLessThanOrEqual",
+    outputs: [
+      {
+        internalType: "bool",
+        name: "",
+        type: "bool",
+      },
+    ],
+    stateMutability: "pure",
     type: "function",
   },
   {

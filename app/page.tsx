@@ -1,5 +1,5 @@
 import { Navbar } from "@/components/navbar";
-import { Dashboard } from "@/components/dashboard";
+import Dashboard from "@/components/dashboard";
 import { Toaster } from "@/components/ui/toaster";
 
 export default function Home() {
