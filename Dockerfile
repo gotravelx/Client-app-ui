@@ -6,8 +6,8 @@ WORKDIR /app
 # Copy dependency files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies with conflict resolution
+RUN npm install --legacy-peer-deps
 
 # Copy all source code
 COPY . .
@@ -22,9 +22,11 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Install only production dependencies
+# Copy only package files first
 COPY package*.json ./
-RUN npm install --only=production
+
+# Install only production dependencies (with peer dep fix)
+RUN npm install --only=production --legacy-peer-deps
 
 # Copy the built app from builder
 COPY --from=builder /app/.next ./.next
