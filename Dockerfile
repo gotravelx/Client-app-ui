@@ -6,30 +6,33 @@ WORKDIR /app
 # Copy dependency files
 COPY package*.json ./
 
-# Install dependencies with conflict resolution
+# Install dependencies
 RUN npm install --legacy-peer-deps
 
 # Copy all source code
 COPY . .
 
-# Build the Next.js static app
+# Build the Next.js app
 RUN npm run build
+
+# Export static site
+RUN npm run export
 
 # ---------------------------------------
 
-# Stage 2: Serve the static app
+# Stage 2: Serve the app
 FROM node:18-alpine
 
 WORKDIR /app
 
-# Install lightweight static server
+# Install 'serve' to serve static content
 RUN npm install -g serve
 
-# Copy the exported static site from builder
+# Copy exported static site
 COPY --from=builder /app/out ./out
 
-# Expose port 3000
+# Expose port
 EXPOSE 3000
 
-# Serve the static site
+# Start static server
 CMD ["serve", "-s", "out", "-l", "3000"]
