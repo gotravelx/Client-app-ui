@@ -12,31 +12,24 @@ RUN npm install --legacy-peer-deps
 # Copy all source code
 COPY . .
 
-# Build the Next.js app
+# Build the Next.js static app
 RUN npm run build
 
 # ---------------------------------------
 
-# Stage 2: Run the app
+# Stage 2: Serve the static app
 FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy only package files first
-COPY package*.json ./
+# Install lightweight static server
+RUN npm install -g serve
 
-# Install only production dependencies (with peer dep fix)
-RUN npm install --only=production --legacy-peer-deps
+# Copy the exported static site from builder
+COPY --from=builder /app/out ./out
 
-# Copy the built app from builder
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/next.config.mjs ./
-COPY --from=builder /app/package.json ./
-
-# Expose port (default Next.js port)
+# Expose port 3000
 EXPOSE 3000
 
-# Start the app
-CMD ["npm", "start"]
+# Serve the static site
+CMD ["serve", "-s", "out", "-l", "3000"]
