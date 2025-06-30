@@ -7,11 +7,11 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --legacy-peer-deps
 
-# Copy the full source code
+# Copy all project files
 COPY . .
 
-# Build and export the app
-RUN npx next build && npx next export
+# Only run next build — output: export handles static output to /out
+RUN npx next build
 
 # ---------------------------------------
 
@@ -20,14 +20,14 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Install a lightweight static file server
+# Install static file server
 RUN npm install -g serve
 
-# Copy the static export from builder
+# Copy the exported static app from builder
 COPY --from=builder /app/out ./out
 
-# Expose the port
+# Expose Next.js static port
 EXPOSE 3000
 
-# Serve the app
+# Start the static server
 CMD ["serve", "-s", "out", "-l", "3000"]
