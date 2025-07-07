@@ -12,15 +12,12 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Lock, Unlock, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { getBaseUrl } from "@/utils/base_url";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "./ui/tooltip";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { decryptFlightData } from "@/utils/api";
 
 interface CombinedFlightTableProps {
   events: Array<{ [key: string]: any }>;
@@ -30,6 +27,8 @@ interface CombinedFlightTableProps {
   onClearSearch?: () => void;
   onSearchResults?: (results: any[], searchParams: SearchParams | null) => void;
 }
+
+const baseUrl = process.env.NEXT_PUBLIC_API_URL;
 
 type FlightData = {
   eventId: string; // Unique identifier for each event
@@ -439,10 +438,12 @@ const determineFlightStatus = (flight: FlightData): string => {
 // Determine flight status code based on UTC timestamps
 const determineFlightStatusCode = (flight: FlightData): string => {
   // If we already have a status code from the blockchain, use it
-  if (shouldShowCell(flight.flightStatusCode)) {
-    return flight.flightStatusCode;
+  if (shouldShowCell(flight.flightStatus)) {
+    return flight.flightStatus;
   }
 
+  console.log(flight);
+  
   // Otherwise, determine status code based on UTC timestamps
   if (shouldShowCell(flight.inUtc)) {
     return "IN";
@@ -909,7 +910,7 @@ export function CombinedFlightTable({
 
     try {
       const response = await fetch(
-        `${getBaseUrl()}/flights/fetch-historical/${flightNumber}/date-range?fromDate=${startDate}&toDate=${endDate}&carrierCode=${carrierCode}`,
+        `${baseUrl}/v1/flights/fetch-historical/${flightNumber}/date-range?fromDate=${startDate}&toDate=${endDate}&carrierCode=${carrierCode}`,
         {
           method: "GET",
           headers: {
@@ -1074,7 +1075,7 @@ export function CombinedFlightTable({
 
         try {
           const decryptResponse = await fetch(
-            `${getBaseUrl()}/flights/decrypt-flight-data`,
+            `${baseUrl}/v1/flights/decrypt-flight-data`,
             {
               method: "POST",
               headers: {
@@ -1540,7 +1541,7 @@ export function CombinedFlightTable({
         });
 
         const response = await fetch(
-          `${getBaseUrl()}/flights/decrypt-flight-data`,
+          `${baseUrl}/v1/flights/decrypt-flight-data`,
           {
             method: "POST",
             headers: {
@@ -1627,7 +1628,7 @@ export function CombinedFlightTable({
 
     try {
       const response = await fetch(
-        `${getBaseUrl()}/flights/decrypt-flight-data`,
+        `${baseUrl}/v1/flights/decrypt-flight-data`,
         {
           method: "POST",
           headers: {
