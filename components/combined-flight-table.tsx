@@ -476,11 +476,8 @@ export function CombinedFlightTable({
   const [decryptedMap, setDecryptedMap] = useState<Record<string, string>>({});
   const [pendingDecryption, setPendingDecryption] = useState<string[]>([]);
   const [apiError, setApiError] = useState<string | null>(null);
-
-  // Process events by consolidating them based on flight number, carrier code and timestamp
-  // Memoize this function to avoid unnecessary re-processing
   const processEvents = useCallback(() => {
-    // Group events by timestamp, flight number and carrier code
+    
     const flightEventMap = new Map<string, FlightData>();
 
     events.forEach((event) => {
@@ -1320,6 +1317,7 @@ export function CombinedFlightTable({
             arrivalDelayMinutes: "",
             outUtc: "",
             offUtc: "",
+            onUtc: "", // <-- Added missing property
             inUtc: "",
             events: [],
             encryptedData: {},

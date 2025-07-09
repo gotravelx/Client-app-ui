@@ -9,6 +9,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  basePath:"/client",
   experimental: {
     webpackBuildWorker: true,
     parallelServerBuildTraces: true,

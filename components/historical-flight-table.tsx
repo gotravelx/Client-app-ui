@@ -683,7 +683,7 @@ export function ApiFlightTable({
                     <TableCell>
                       {isLikelyEncrypted(event.rawEventTime)
                         ? renderCellValue(event.rawEventTime, true)
-                        : formatDateTime(event.eventTime, timeFormat)}
+                        : event.eventTime}
                     </TableCell>
                     <TableCell>
                       {event.departureCity !== "TBD" ||
