@@ -41,7 +41,6 @@ export default function Dashboard() {
   const [isConnected, setIsConnected] = useState(false);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
-  const [newEventsCount, setNewEventsCount] = useState(0);
   const [newTxCount, setNewTxCount] = useState(0);
   const [activeTab, setActiveTab] = useState("combined");
   const [searchResults, setSearchResults] = useState<any[]>([]);

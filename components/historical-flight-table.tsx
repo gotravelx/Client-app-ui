@@ -175,34 +175,6 @@ const CellSkeleton = () => (
   </div>
 );
 
-const formatDateTime = (timestamp: string, format: "utc" | "local"): string => {
-  if (!timestamp || timestamp === "TBD" || timestamp === "N/A")
-    return timestamp;
-
-  try {
-    const date = new Date(timestamp);
-
-    if (format === "utc") {
-      return date
-        .toISOString()
-        .replace("T", " ")
-        .replace(/\.\d+Z$/, "Z");
-    } else {
-      return date.toLocaleString("en-US", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: true,
-      });
-    }
-  } catch (e) {
-    return timestamp;
-  }
-};
-
 const organizeFlightDataByStatusEvents = (
   flightDetails: any[],
   decryptedMap: Record<string, string>
