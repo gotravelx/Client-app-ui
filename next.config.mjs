@@ -9,7 +9,12 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  output: 'export',
-}
+  experimental: {
+    webpackBuildWorker: true,
+    parallelServerBuildTraces: true,
+    parallelServerCompiles: true,
+  },
+  output: "export",
+};
 
 export default nextConfig
