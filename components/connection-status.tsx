@@ -1,36 +1,44 @@
-import { Badge } from "@/components/ui/badge"
-import { AlertCircle, CheckCircle2 } from "lucide-react"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+"use client"
+
+import { Wifi, WifiOff, Clock } from "lucide-react"
 
 interface ConnectionStatusProps {
   isConnected: boolean
+  lastUpdate: Date | null
 }
 
-export function ConnectionStatus({ isConnected }: ConnectionStatusProps) {
+export function ConnectionStatus({ isConnected, lastUpdate }: ConnectionStatusProps) {
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString("en-US", {
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })
+  }
+
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="flex items-center space-x-2">
-            <Badge variant={isConnected ? "default" : "destructive"} className="px-3 py-1">
-              {isConnected ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4 mr-1" />
-                  <span>Connected to Camino Network</span>
-                </>
-              ) : (
-                <>
-                  <AlertCircle className="w-4 h-4 mr-1" />
-                  <span>Disconnected</span>
-                </>
-              )}
-            </Badge>
-          </div>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>{isConnected ? "WebSocket connection active" : "WebSocket connection failed"}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <div className="flex items-center justify-between mb-6 p-3 bg-muted rounded-lg">
+      <div className="flex items-center gap-2">
+        {isConnected ? (
+          <>
+            <Wifi className="h-4 w-4 text-green-500" />
+            <span className="text-sm text-green-600 font-medium">Connected to Blockchain</span>
+          </>
+        ) : (
+          <>
+            <WifiOff className="h-4 w-4 text-red-500" />
+            <span className="text-sm text-red-600 font-medium">Disconnected</span>
+          </>
+        )}
+      </div>
+
+      {lastUpdate && (
+        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+          <Clock className="h-3 w-3" />
+          <span>Last update: {formatTime(lastUpdate)}</span>
+        </div>
+      )}
+    </div>
   )
 }

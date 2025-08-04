@@ -1,53 +1,30 @@
-import type React from "react";
-import "@/app/globals.css";
-import { ThemeProvider } from "@/components/theme-provider";
+import type React from "react"
+import type { Metadata } from "next"
+import { Inter } from "next/font/google"
+import "./globals.css"
+import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "@/components/ui/sonner"
 
-export const metadata = {
-  title: "Client-App",
-  icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon.ico",
-    apple: "/apple-touch-icon.png",
-  },
-  keywords: [
-    "Flight",
-    "Status",
-    "Blockchain",
-    "Real-time",
-    "Tracking",
-    "Web3",
-    "DApp",
-    "Decentralized",
-    "Ethereum",
-    "Smart Contracts",
-    "Cryptocurrency",
-  ],
-  description: "Real-time flight status tracking on blockchain",
-  generator: "v0.dev",
-};
+const inter = Inter({ subsets: ["latin"] })
+
+export const metadata: Metadata = {
+  title: "GoTravelX - Flight Tracking",
+  description: "Real-time flight tracking with blockchain integration",
+}
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <link rel="icon" href="/favicon.ico" />
-      </head>
-      <body>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="light"
-          enableSystem
-          disableTransitionOnChange
-        >
+      <body className={inter.className}>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>
-  );
+  )
 }
-
-import "./globals.css";

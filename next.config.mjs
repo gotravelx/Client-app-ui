@@ -9,13 +9,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // basePath:"/client",
-  experimental: {
-    webpackBuildWorker: true,
-    parallelServerBuildTraces: true,
-    parallelServerCompiles: true,
-  },
-  output: "export",
-};
+  output: 'export',
+}
 
-export default nextConfig;
+export default nextConfig
