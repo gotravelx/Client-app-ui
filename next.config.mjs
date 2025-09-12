@@ -15,6 +15,7 @@ const nextConfig = {
     parallelServerCompiles: true,
   },
   output: "export",
+  // basePath: "/client",
 };
 
 export default nextConfig

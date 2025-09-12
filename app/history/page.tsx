@@ -86,7 +86,6 @@ export default function HistoryPage() {
                 }
               }
             } catch (decryptError) {
-              console.error("Decryption failed:", decryptError);
             }
           }
 
@@ -113,7 +112,6 @@ export default function HistoryPage() {
         setLastRefresh(new Date());
       }
     } catch (error) {
-      console.error("Failed to fetch historical data:", error);
     } finally {
       setLoading(false);
     }
@@ -226,7 +224,7 @@ export default function HistoryPage() {
         />
         <div className="container mx-auto px-4 py-8 max-w-4xl">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" data-testid="loading-spinner"></div>
             <p className="mt-2 text-muted-foreground">
               Loading historical flight data...
             </p>
@@ -301,7 +299,7 @@ export default function HistoryPage() {
                 Showing flights for{" "}
                 {moment(selectedDate).format("MMMM DD, YYYY")}
               </span>
-              <Button variant="ghost" size="sm" onClick={clearFilter}>
+              <Button data-testid="clear-date-filter" variant="ghost" size="sm" onClick={clearFilter}>
                 <X className="h-4 w-4" />
               </Button>
             </div>

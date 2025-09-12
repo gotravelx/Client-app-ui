@@ -1,4 +1,4 @@
-const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
+const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL|| 'https://api.test.com';
 
 export async function fetchHistoricalFlightData(
   flightNumber: string,
@@ -24,7 +24,6 @@ export async function fetchHistoricalFlightData(
     const data = await response.json()
     return data
   } catch (error) {
-    console.error("Error fetching historical flight data:", error)
     throw error
   }
 }
@@ -47,7 +46,6 @@ export async function decryptFlightData(encryptedData: string[]) {
 
     return await response.json()
   } catch (error) {
-    console.error("Error decrypting flight data:", error)
     throw error
   }
 }

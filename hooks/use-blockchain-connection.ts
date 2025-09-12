@@ -71,7 +71,6 @@ export function useBlockchainConnection() {
             setLastUpdate(new Date())
           }
         } catch (error) {
-          console.error("Error parsing blockchain event:", error)
         }
       }
 
@@ -83,13 +82,11 @@ export function useBlockchainConnection() {
       }
 
       websocket.onerror = (error) => {
-        console.error("WebSocket error:", error)
         setIsConnected(false)
       }
 
       wsRef.current = websocket
     } catch (error) {
-      console.error("Failed to connect to blockchain:", error)
     }
   }
 

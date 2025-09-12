@@ -55,7 +55,6 @@ export default function FlightTrackingDashboard() {
           const eventDate = new Date(relatedEvent.timestamp)
             .toISOString()
             .split("T")[0];
-          console.log("Fallback to event date:", eventDate);
           data = await trySearch(eventDate);
         }
       }
@@ -65,7 +64,6 @@ export default function FlightTrackingDashboard() {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         const yestStr = yesterday.toISOString().split("T")[0];
-        console.log("Fallback to yesterday:", yestStr);
         data = await trySearch(yestStr);
       }
 
@@ -102,7 +100,6 @@ export default function FlightTrackingDashboard() {
               }
             }
           } catch (decryptError) {
-            console.error("Decryption failed:", decryptError);
           }
         }
 
@@ -113,7 +110,6 @@ export default function FlightTrackingDashboard() {
         setFlightData(null);
       }
     } catch (error) {
-      console.error("Search failed:", error);
       setFlightData(null);
     } finally {
       setLoading(false);
@@ -143,7 +139,6 @@ export default function FlightTrackingDashboard() {
     if (!currentFlightNumber) return;
 
     const interval = setInterval(() => {
-      console.log("Auto-refreshing flight data...");
       handleSearch(currentFlightNumber);
     }, 2 * 60 * 1000); // 2 minutes
 
@@ -157,7 +152,6 @@ export default function FlightTrackingDashboard() {
         latestEvent.flightNumber === currentFlightNumber ||
         latestEvent.description?.includes(currentFlightNumber)
       ) {
-        console.log("Blockchain event received, refreshing flight data...");
         const debounce = setTimeout(() => {
           handleSearch(currentFlightNumber);
         }, 1000);

@@ -60,7 +60,6 @@ export function RealtimeEvents({ events, onEventsUpdate }: RealtimeEventsProps) 
             onEventsUpdate([newEvent, ...events.slice(0, 49)]) // Keep last 50 events
           }
         } catch (error) {
-          console.error("Error parsing blockchain event:", error)
         }
       }
 
@@ -70,13 +69,11 @@ export function RealtimeEvents({ events, onEventsUpdate }: RealtimeEventsProps) 
       }
 
       websocket.onerror = (error) => {
-        console.error("WebSocket error:", error)
         setIsConnected(false)
       }
 
       setWs(websocket)
     } catch (error) {
-      console.error("Failed to connect to blockchain:", error)
     }
   }
 

@@ -67,7 +67,6 @@ export function FlightSearch({ onFlightSelect }: FlightSearchProps) {
 
       setSearchResults(data.flightDetails || [])
     } catch (error) {
-      console.error("Search failed:", error)
     } finally {
       setLoading(false)
     }

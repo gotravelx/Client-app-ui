@@ -35,8 +35,13 @@ export function SearchBar({ onSearch, loading }: SearchBarProps) {
           type="submit"
           disabled={loading || !flightNumber.trim()}
           className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-gray-500 hover:text-primary disabled:opacity-50"
+          aria-label="Search"
         >
-          {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Search className="h-5 w-5" />}
+          {loading ? (
+            <Loader2 className="h-5 w-5 animate-spin" data-testid="loading-spinner" />
+          ) : (
+            <Search className="h-5 w-5" data-testid="search-icon" />
+          )}
         </button>
       </div>
     </form>
