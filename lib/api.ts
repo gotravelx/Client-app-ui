@@ -5,10 +5,12 @@ export async function fetchHistoricalFlightData(
   carrierCode: string,
   fromDate: string,
   toDate: string,
+  arrivalCode:string,     
+  departureCode:string,
 ) {
   try {
     const response = await fetch(
-      `${baseUrl}/v1/flights/fetch-historical/${flightNumber}/date-range?fromDate=${fromDate}&toDate=${toDate}&carrierCode=${carrierCode}`,
+      `${baseUrl}/v1/flights/fetch-historical/${flightNumber}/date-range?fromDate=${fromDate}&toDate=${toDate}&carrierCode=${carrierCode}&departureAirport=${departureCode}&arrivalAirport=${arrivalCode}`,
       {
         method: "GET",
         headers: {
@@ -45,6 +47,32 @@ export async function decryptFlightData(encryptedData: string[]) {
     }
 
     return await response.json()
+  } catch (error) {
+    throw error
+  }
+}
+
+
+export async function searchFlightData(
+  flightNumber: string,
+) {
+  try {
+    const response = await fetch(
+      `${baseUrl}/v1/flights/get-flight-status/${flightNumber}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    )
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`)
+    }
+
+    const data = await response.json()
+    return data
   } catch (error) {
     throw error
   }
