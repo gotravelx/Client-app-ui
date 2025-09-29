@@ -85,13 +85,15 @@ const convertToLocalTime = (utcTime: string, airportCode: string) => {
 
   try {
     const timezone = getAirportTimezone(airportCode)
-    const localTime = moment.utc(utcTime).tz(timezone)
+
+    // Parse in the airport's timezone, but keep local clock time
+    const localTime = moment.tz(utcTime, timezone)
 
     if (!localTime.isValid()) return null
 
     return {
-      time: localTime.format("h:mm A"), // 7:00 AM format
-      date: localTime.format("dddd DD-MMM-YYYY"), // Monday 28-Jul-2025
+      time: localTime.format("h:mm A"), // 9:35 AM
+      date: localTime.format("dddd DD-MMM-YYYY"), // Thursday 25-Sep-2025
       timezone: localTime.format("z"), // CDT, EDT, etc.
       full: localTime,
       raw: localTime.format(),
@@ -101,9 +103,12 @@ const convertToLocalTime = (utcTime: string, airportCode: string) => {
   }
 }
 
+
+
+
 const calculateFlightDuration = () => {
-  const depTime = flight.utcTimes?.scheduledDeparture || flight.utcTimes?.estimatedDeparture
-  const arrTime = flight.utcTimes?.scheduledArrival || flight.utcTimes?.estimatedArrival
+  const depTime = flight.times?.scheduledDeparture || flight.times?.estimatedDeparture
+  const arrTime = flight.times?.scheduledArrival || flight.times?.estimatedArrival
 
   if (!depTime || !arrTime) return null
 
@@ -166,19 +171,19 @@ const getDelayInfo = (scheduledTime: string, actualTime: string, airportCode: st
 
 const getFlightEventsTimeline = () => {
   const events = []
-  const status = flight.status
+  const status = flight.times
   const now = moment.utc()
   
   // Check if flight is cancelled
-  const isCancelled = flight.status?.statusCode?.includes('CNCL') || 
-                     flight.flightStatus?.includes('CNCL') || 
-                     flight.status?.statusCode === 'C' || 
-                     flight.flightStatus === 'C'
+  const isCancelled = flight.status?.legStatus?.includes('CNCL') || 
+                     flight?.status.legStatus?.includes('CNCL') || 
+                     flight.status?.legStatus === 'C' || 
+                     flight?.status.legStatus === 'C'
 
   // If cancelled, show cancellation event first
   if (isCancelled) {
-    const cancelTime = flight.utcTimes?.scheduledDeparture || new Date().toISOString()
-    const cancelLocal = convertToLocalTime(cancelTime, flight.departureAirport)
+    const cancelTime = flight.times?.scheduledDeparture || new Date().toISOString()
+    const cancelLocal = convertToLocalTime(cancelTime, flight.departureAirport?.code)
     events.push({
       type: "CNCL",
       title: "Flight Cancelled",
@@ -187,15 +192,15 @@ const getFlightEventsTimeline = () => {
       local: cancelLocal,
       icon: AlertCircle,
       status: "cancelled",
-      location: `${flight.departureAirport} - ${flight.departureCity}`,
+      location: `${flight.departureAirport?.code} - ${flight.departureCity?.city}`,
       order: 0
     })
     return events // Return only cancellation event for cancelled flights
   }
 
   // 1. OUT - Pushback from gate (First event)
-  if (status?.outUtc && status.outUtc !== "") {
-    const outLocal = convertToLocalTime(status.outUtc, flight.departureAirport)
+  if (status?.outTime && status.outTime !== "") {
+    const outLocal = convertToLocalTime(status.outTime, flight.departureAirport?.code)
     events.push({
       type: "OUT",
       title: "Left Gate",
@@ -204,14 +209,14 @@ const getFlightEventsTimeline = () => {
       local: outLocal,
       icon: LogOut,
       status: "completed",
-      location: `${flight.departureAirport} - ${flight.departureCity}`,
+      location: `${flight.departureAirport?.code} - ${flight.departureAirport?.city}`,
       order: 1
     })
   } else {
     // Show scheduled/estimated departure
-    const scheduledDep = flight.utcTimes?.scheduledDeparture || flight.utcTimes?.estimatedDeparture
+    const scheduledDep = flight.times?.scheduledDeparture || flight.times?.estimatedDeparture
     if (scheduledDep) {
-      const depLocal = convertToLocalTime(scheduledDep, flight.departureAirport)
+      const depLocal = convertToLocalTime(scheduledDep, flight.departureAirport?.code)
       const isUpcoming = moment.utc(scheduledDep).isAfter(now)
       events.push({
         type: "OUT",
@@ -221,24 +226,24 @@ const getFlightEventsTimeline = () => {
         local: depLocal,
         icon: LogOut,
         status: isUpcoming ? "upcoming" : "scheduled",
-        location: `${flight.departureAirport} - ${flight.departureCity}`,
+        location: `${flight.departureAirport?.code} - ${flight.departureAirport?.city}`,
         order: 1
       })
     }
   }
 
   // 2. OFF - Takeoff (Second event)
-  if (status?.offUtc && status.offUtc !== "") {
-    const offLocal = convertToLocalTime(status.offUtc, flight.departureAirport)
+  if (status?.offTime && status.offTime !== "") {
+    const offLocal = convertToLocalTime(status.offTime, flight.departureAirport?.code)
     events.push({
       type: "OFF",
       title: "Takeoff",
-      description: `Departed ${flight.departureAirport}`,
+      description: `Departed ${flight.departureAirport?.code}`,
       timestamp: status.offUtc,
       local: offLocal,
       icon: PlaneTakeoff,
       status: "completed",
-      location: `${flight.departureAirport} - ${flight.departureCity}`,
+      location: `${flight.departureAirport?.code} - ${flight.departureAirport?.city}`,
       order: 2
     })
   } else {
@@ -247,73 +252,73 @@ const getFlightEventsTimeline = () => {
     let takeoffStatus = "scheduled"
     let takeoffTitle = "Scheduled Takeoff"
     
-    if (status?.outUtc) {
+    if (status?.outTime) {
       // If already left gate, estimate takeoff in 15 minutes
-      takeoffTime = moment.utc(status.outUtc).add(15, "minutes").toISOString()
+      takeoffTime = moment.utc(status.outTime).add(15, "minutes").toISOString()
       takeoffStatus = moment.utc(takeoffTime).isAfter(now) ? "upcoming" : "estimated"
       takeoffTitle = takeoffStatus === "upcoming" ? "Estimated Takeoff" : "Expected Takeoff"
-    } else if (flight.utcTimes?.scheduledDeparture) {
+    } else if (flight.times?.scheduledDeparture) {
       // If not left gate yet, estimate takeoff 30 minutes after scheduled departure
-      takeoffTime = moment.utc(flight.utcTimes.scheduledDeparture).add(30, "minutes").toISOString()
+      takeoffTime = moment.utc(flight.times.scheduledDeparture).add(30, "minutes").toISOString()
       takeoffStatus = "tbd"
       takeoffTitle = "Takeoff - TBD"
     }
 
     if (takeoffTime) {
-      const takeoffLocal = convertToLocalTime(takeoffTime, flight.departureAirport)
+      const takeoffLocal = convertToLocalTime(takeoffTime, flight.departureAirport?.code)
       events.push({
         type: "OFF",
         title: takeoffTitle,
         description: takeoffStatus === "tbd" ? 
-          `Takeoff time to be decided from ${flight.departureAirport}` :
-          `${takeoffTitle.split(' ')[0]} departure from ${flight.departureAirport}`,
+          `Takeoff time to be decided from ${flight.departureAirport?.code}` :
+          `${takeoffTitle.split(' ')[0]} departure from ${flight.departureAirport.code}`,
         timestamp: takeoffTime,
         local: takeoffLocal,
         icon: PlaneTakeoff,
         status: takeoffStatus,
-        location: `${flight.departureAirport} - ${flight.departureCity}`,
+        location: `${flight.departureAirport?.code} - ${flight.departureAirport?.code}`,
         order: 2
       })
     }
   }
 
   // 3. ON - Landing (Third event)
-  if (status?.onUtc && status.onUtc !== "") {
-    const onLocal = convertToLocalTime(status.onUtc, flight.arrivalAirport)
+  if (status?.onTime && status.onTime !== "") {
+    const onLocal = convertToLocalTime(status.onTime, flight.arrivalAirport?.code)
     events.push({
       type: "ON",
       title: "Landing",
-      description: `Landed at ${flight.arrivalAirport}`,
-      timestamp: status.onUtc,
+      description: `Landed at ${flight.arrivalAirport?.code}`,
+      timestamp: status.onTime,
       local: onLocal,
       icon: PlaneLanding,
       status: "completed",
-      location: `${flight.arrivalAirport} - ${flight.arrivalCity}`,
+      location: `${flight.arrivalAirport?.code} - ${flight.arrivalAirport?.city}`,
       order: 3
     })
   } else {
     // Show estimated landing
-    const arrivalTime = flight.utcTimes?.estimatedArrival || flight.utcTimes?.scheduledArrival
+    const arrivalTime = flight.times?.estimatedArrival || flight.times?.scheduledArrival
     if (arrivalTime) {
-      const landingLocal = convertToLocalTime(arrivalTime, flight.arrivalAirport)
+      const landingLocal = convertToLocalTime(arrivalTime, flight.arrivalAirport?.code)
       const isUpcoming = moment.utc(arrivalTime).isAfter(now)
       events.push({
         type: "ON",
         title: isUpcoming ? "Estimated Landing" : "Expected Landing",
-        description: `${isUpcoming ? "Estimated" : "Expected"} arrival at ${flight.arrivalAirport}`,
+        description: `${isUpcoming ? "Estimated" : "Expected"} arrival at ${flight.arrivalAirport?.code}`,
         timestamp: arrivalTime,
         local: landingLocal,
         icon: PlaneLanding,
         status: isUpcoming ? "upcoming" : "estimated",
-        location: `${flight.arrivalAirport} - ${flight.arrivalCity}`,
+        location: `${flight.arrivalAirport?.code} - ${flight.arrivalAirport?.city}`,
         order: 3
       })
     }
   }
 
   // 4. IN - Arrival at gate (Fourth event)
-  if (status?.inUtc && status.inUtc !== "") {
-    const inLocal = convertToLocalTime(status.inUtc, flight.arrivalAirport)
+  if (status?.inTime && status.inTime !== "") {
+    const inLocal = convertToLocalTime(status.inTime, flight.arrivalAirport?.code)
     events.push({
       type: "IN",
       title: "Arrived at Gate",
@@ -322,24 +327,24 @@ const getFlightEventsTimeline = () => {
       local: inLocal,
       icon: MapPin,
       status: "completed",
-      location: `${flight.arrivalAirport} - ${flight.arrivalCity}`,
+      location: `${flight.arrivalAirport?.code} - ${flight.arrivalAirport?.city}`,
       order: 4
     })
   } else {
     // Show estimated gate arrival
     let gateTime = null
     
-    if (status?.onUtc) {
+    if (status?.onTime) {
       // If already landed, estimate gate arrival in 15 minutes
-      gateTime = moment.utc(status.onUtc).add(15, "minutes").toISOString()
-    } else if (flight.utcTimes?.estimatedArrival || flight.utcTimes?.scheduledArrival) {
+      gateTime = moment.utc(status.onTime).add(15, "minutes").toISOString()
+    } else if (flight.times?.estimatedArrival || flight.times?.scheduledArrival) {
       // If not landed yet, estimate gate arrival 15 minutes after landing
-      const baseTime = flight.utcTimes?.estimatedArrival || flight.utcTimes?.scheduledArrival
+      const baseTime = flight.times?.estimatedArrival || flight.times?.scheduledArrival
       gateTime = moment.utc(baseTime).add(15, "minutes").toISOString()
     }
 
     if (gateTime) {
-      const gateLocal = convertToLocalTime(gateTime, flight.arrivalAirport)
+      const gateLocal = convertToLocalTime(gateTime, flight.arrivalAirport?.code)
       const isUpcoming = moment.utc(gateTime).isAfter(now)
       events.push({
         type: "IN",
@@ -349,7 +354,7 @@ const getFlightEventsTimeline = () => {
         local: gateLocal,
         icon: MapPin,
         status: isUpcoming ? "upcoming" : "estimated",
-        location: `${flight.arrivalAirport} - ${flight.arrivalCity}`,
+        location: `${flight.arrivalAirport?.code} - ${flight.arrivalAirport?.city}`,
         order: 4
       })
     }
@@ -360,30 +365,30 @@ const getFlightEventsTimeline = () => {
 }
 
 const departureLocal = {
-  scheduled: convertToLocalTime(flight.utcTimes?.scheduledDeparture, flight.departureAirport),
-  estimated: convertToLocalTime(flight.utcTimes?.estimatedDeparture, flight.departureAirport),
-  actual: convertToLocalTime(flight.utcTimes?.actualDeparture, flight.departureAirport),
+  scheduled: convertToLocalTime(flight.times?.scheduledDeparture, flight.departureAirport?.code),
+  estimated: convertToLocalTime(flight.times?.estimatedDeparture, flight.departureAirport?.code),
+  actual: convertToLocalTime(flight.times?.actualDeparture, flight.departureAirport?.code),
 }
 
 const arrivalLocal = {
-  scheduled: convertToLocalTime(flight.utcTimes?.scheduledArrival, flight.arrivalAirport),
-  estimated: convertToLocalTime(flight.utcTimes?.estimatedArrival, flight.arrivalAirport),
-  actual: convertToLocalTime(flight.utcTimes?.actualArrival, flight.arrivalAirport),
+  scheduled: convertToLocalTime(flight.times?.scheduledArrival, flight.arrivalAirport?.code),
+  estimated: convertToLocalTime(flight.times?.estimatedArrival, flight.arrivalAirport?.code),
+  actual: convertToLocalTime(flight.times?.actualArrival, flight.arrivalAirport?.code),
 }
 
 const flightDuration = calculateFlightDuration()
 const flightEvents = getFlightEventsTimeline()
 
 const departureDelay = getDelayInfo(
-  flight.utcTimes?.scheduledDeparture,
-  flight.utcTimes?.actualDeparture || flight.utcTimes?.estimatedDeparture,
-  flight.departureAirport,
+  flight.times?.scheduledDeparture,
+  flight.times?.actualDeparture || flight.times?.estimatedDeparture,
+  flight.departureAirport?.code,
 )
 
 const arrivalDelay = getDelayInfo(
-  flight.utcTimes?.scheduledArrival,
-  flight.utcTimes?.actualArrival || flight.utcTimes?.estimatedArrival,
-  flight.arrivalAirport,
+  flight.times?.scheduledArrival,
+  flight.times?.actualArrival || flight.times?.estimatedArrival,
+  flight.arrivalAirport?.code,
 )
 
 const formatDateTime = (dateString: string) => {
@@ -414,9 +419,9 @@ const isValidDate = (dateString: string): boolean => {
   }
 }
 
-const getStatusDisplay = (statusCode: string) => {
-  const statusInfo = FLIGHT_STATUS_CODES[statusCode]
-  return statusInfo ? statusInfo.display : statusCode || "N/A"
+const getStatusDisplay = (legStatus: string) => {
+  const statusInfo = FLIGHT_STATUS_CODES[legStatus]
+  return statusInfo ? statusInfo.display : legStatus || "N/A"
 }
 
 const getDelayBadgeColor = (delayInfo: any) => {
@@ -512,14 +517,14 @@ return (
                     </Badge>
                   )}
                 </CardTitle>
-                <FlightStatusBadge status={flight.status?.statusCode || flight.flightStatus} />
+                <FlightStatusBadge status={flight.status?.legStatus || flight.flightStatus} />
               </div>
 
               <div className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-4">
-                  <span className="font-semibold">{flight.departureAirport}</span>
+                  <span className="font-semibold">{flight.departureAirport?.code}</span>
                   <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-semibold">{flight.arrivalAirport}</span>
+                  <span className="font-semibold">{flight.arrivalAirport?.code}</span>
                 </div>
                 <div className="text-muted-foreground">{departureLocal.scheduled?.date || "N/A"}</div>
               </div>
@@ -528,12 +533,12 @@ return (
               <div className="grid grid-cols-3 gap-4 items-center">
                 {/* Departure */}
                 <div className="text-left">
-                  <div className="text-2xl font-bold">{flight.departureAirport}</div>
-                  <div className="text-sm text-muted-foreground">{flight.departureCity}</div>
+                  <div className="text-2xl font-bold">{flight.departureAirport?.code}</div>
+                  <div className="text-sm text-muted-foreground">{flight.departureAirport?.city}</div>
                   <div className="text-xs mt-1">Gate {flight.departureGate || "TBD"}</div>
                   <div className="text-xs text-muted-foreground">
                     {flight.departureAirport &&
-                      getAirportTimezone(flight.departureAirport).split("/")[1]?.replace("_", " ")}
+                      getAirportTimezone(flight.departureAirport?.code).split("/")[1]?.replace("_", " ")}
                   </div>
 
                   {/* Departure Time Display */}
@@ -575,12 +580,12 @@ return (
 
                 {/* Arrival */}
                 <div className="text-right">
-                  <div className="text-2xl font-bold">{flight.arrivalAirport}</div>
-                  <div className="text-sm text-muted-foreground">{flight.arrivalCity}</div>
+                  <div className="text-2xl font-bold">{flight.arrivalAirport?.code}</div>
+                  <div className="text-sm text-muted-foreground">{flight.arrivalAirport?.city}</div>
                   <div className="text-xs mt-1">Gate {flight.arrivalGate || "TBD"}</div>
                   <div className="text-xs text-muted-foreground">
                     {flight.arrivalAirport &&
-                      getAirportTimezone(flight.arrivalAirport).split("/")[1]?.replace("_", " ")}
+                      getAirportTimezone(flight.arrivalAirport?.code).split("/")[1]?.replace("_", " ")}
                   </div>
 
                   {/* Arrival Time Display */}
@@ -615,9 +620,9 @@ return (
                         Departure Times
                       </div>
                       <div
-                        className={`text-xs px-2 py-1 rounded ${getDepartureStateColor(flight.status?.departureState || flight.flightStatus)}`}
+                        className={`text-xs px-2 py-1 rounded ${getDepartureStateColor(flight.status?.departureStatus || flight.flightStatus)}`}
                       >
-                        {getStatusDisplay(flight.status?.departureState || flight.flightStatus)}
+                        {getStatusDisplay(flight.status?.departureStatus || flight.flightStatus)}
                       </div>
                     </h5>
                     <div className="space-y-2 text-sm">
@@ -645,9 +650,9 @@ return (
                         Arrival Times
                       </div>
                       <div
-                        className={`text-xs px-2 py-1 rounded ${getArrivalStateColor(flight.status?.arrivalState || flight.flightStatus)}`}
+                        className={`text-xs px-2 py-1 rounded ${getArrivalStateColor(flight.status?.arrivalStatus || flight.flightStatus)}`}
                       >
-                        {getStatusDisplay(flight.status?.arrivalState || flight.flightStatus)}
+                        {getStatusDisplay(flight.status?.arrivalStatus || flight.flightStatus)}
                       </div>
                     </h5>
                     <div className="space-y-2 text-sm">
@@ -665,7 +670,7 @@ return (
                       </div>
                        <div className="flex justify-between">
                         <span className="text-muted-foreground">BagClaim:</span>
-                        <span>{flight?.utcTimes?.bagClaim|| "TBD"}</span>
+                        <span>{flight?.baggageClaim|| "TBD"}</span>
                       </div>
                     </div>
                   </CardContent>
