@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Search, Loader2, Plane } from "lucide-react"
-import { fetchHistoricalFlightData, decryptFlightData } from "@/lib/api"
+import { fetchHistoricalFlightData, decryptFlightData, searchFlightData } from "@/lib/api"
 import { FlightStatusBadge } from "@/components/flight-status-badge"
 
 interface FlightSearchProps {
@@ -25,10 +25,24 @@ export function FlightSearch({ onFlightSelect }: FlightSearchProps) {
     if (!flightNumber || !carrierCode || !fromDate || !toDate) {
       return
     }
+    console.log("flightNumberflightNumber",flightNumber)
 
     setLoading(true)
     try {
-      const data = await fetchHistoricalFlightData(flightNumber, carrierCode, fromDate, toDate)
+      let arrivalCode: string="" ;
+      let departureCode: string="" ;
+  
+      try {
+        const flightInfoResult = await searchFlightData(flightNumber);
+        if (flightInfoResult?.flightInfo) {
+
+          arrivalCode = flightInfoResult?.flightInfo.arrivalAirport?.code;
+          departureCode = flightInfoResult?.flightInfo.departureAirport?.code;
+        }
+      } catch (e) {
+        console.warn("Could not fetch flight info for airport codes", e);
+      }
+      const data = await fetchHistoricalFlightData(flightNumber, carrierCode, fromDate, toDate,arrivalCode,departureCode)
 
       // Decrypt encrypted data if present
       const encryptedFields = []
