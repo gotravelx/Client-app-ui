@@ -23,7 +23,7 @@ export function Navbar({
   lastRefresh,
 }: NavbarProps) {
   const redirectOnApp = () => {
-    window.location.href = "https://dev.gotravelx.com"
+    window.location.href = "https://gotravelx.com"
   }
 
   const formatTime = (date: Date) => {
