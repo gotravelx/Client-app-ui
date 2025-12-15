@@ -36,10 +36,17 @@ export default function HistoryPage() {
     try {
       let arrivalCode: string ="";
       let departureCode: string="";
-      const flightNum = flightNumber.replace(/^[A-Z]{2,3}/, "");
+      const match = flightNumber.match(/^([A-Z]{2,3})(\d+)$/);
+
+      if (!match) {
+        throw new Error("Invalid flight number format");
+      }
+      
+      const CarrierCode = match[1].toUpperCase();
+      const flightNum = match[2];   
   
       try {
-        const flightInfoResult = await searchFlightData(flightNum);
+        const flightInfoResult = await searchFlightData(flightNum,CarrierCode);
         if (flightInfoResult?.flightInfo) {
           arrivalCode = flightInfoResult.flightInfo.arrivalAirport?.code;
           departureCode = flightInfoResult.flightInfo.departureAirport?.code;

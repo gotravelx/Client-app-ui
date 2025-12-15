@@ -108,10 +108,11 @@ export async function decryptFlightData(encryptedData: string[]) {
 
 export async function searchFlightData(
   flightNumber: string,
+  carrierCode:string
 ) {
   try {
     const response = await fetchWithRetry(
-      `${baseUrl}/v1/flights/get-flight-status/${flightNumber}`,
+      `${baseUrl}/v1/flights/get-flight-status/${flightNumber}?carrier=${carrierCode}`,
       {
         method: "GET",
         headers: getAuthHeaders(),

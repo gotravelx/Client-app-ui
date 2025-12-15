@@ -692,5 +692,5 @@ export const CONTRACT_ABI = [
     }
 ];
 
-export const CONTRACT_ADDRESS = "0xf66cB62Cc9780EED34606AD5CB71b9c7733e1cB2"
+export const CONTRACT_ADDRESS = "0xF1457df936cF6AC51180D6db9ca091b0AC9495a5"
 export const WS_PROVIDER_URL = "wss://columbus.camino.network/ext/bc/C/ws"

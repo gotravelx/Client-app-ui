@@ -25,15 +25,17 @@ export default function FlightTrackingDashboard() {
     setLoading(true);
     setCurrentFlightNumber(flightNumber);
 
-    const carrierCode =
-      flightNumber.match(/^[A-Z]{2,3}/)?.[0] || flightNumber.substring(0, 2);
-    const flightNum = flightNumber.replace(/^[A-Z]{2,3}/, "");
-
+    const rawCarrierCode =
+    flightNumber.match(/^[A-Za-z]{2,3}/)?.[0] || flightNumber.substring(0, 2);
+  
+    const carrierCode = rawCarrierCode?.toUpperCase();
+    const flightNum = flightNumber?.replace(/^[A-Z]{2,3}/, "");
+    
     let arrivalCode: string = "";
     let departureCode: string = "";
 
     const fetchFlights = async () => {
-      const result = await searchFlightData(flightNum);
+      const result = await searchFlightData(flightNum,carrierCode);
       if (result?.flightInfo) {
         arrivalCode = result.flightInfo.arrivalAirport?.code;
         departureCode = result.flightInfo.departureAirport?.code;
