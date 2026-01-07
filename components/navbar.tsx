@@ -92,7 +92,7 @@ export function Navbar({
               rel="noopener noreferrer"
               className="text-primary hover:underline font-mono"
             >
-              {CONTRACT_ADDRESS.substring(0, 6)}...{CONTRACT_ADDRESS.substring(CONTRACT_ADDRESS.length - 4)}
+              {CONTRACT_ADDRESS ? `${CONTRACT_ADDRESS.substring(0, 6)}...${CONTRACT_ADDRESS.substring(CONTRACT_ADDRESS.length - 4)}` : 'N/A'}
             </a>
           </div>
           <ThemeToggle />
