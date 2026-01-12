@@ -7,6 +7,7 @@ import { Navbar } from "@/components/navbar";
 import { useBlockchainConnection } from "@/hooks/use-blockchain-connection";
 import { decryptFlightData, fetchHistoricalFlightData, searchFlightData } from "@/lib/api";
 import { useRouter } from "next/navigation";
+import { AlertCircle } from "lucide-react";
 
 export default function FlightTrackingDashboard() {
   const router = useRouter();
@@ -17,7 +18,7 @@ export default function FlightTrackingDashboard() {
   const [currentFlightNumber, setCurrentFlightNumber] = useState("");
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
-  const [showPopup, setShowPopup] = useState(false); 
+  const [showPopup, setShowPopup] = useState(false);
 
   const { isConnected, lastUpdate, events } = useBlockchainConnection();
 
@@ -26,16 +27,16 @@ export default function FlightTrackingDashboard() {
     setCurrentFlightNumber(flightNumber);
 
     const rawCarrierCode =
-    flightNumber.match(/^[A-Za-z]{2,3}/)?.[0] || flightNumber.substring(0, 2);
-  
+      flightNumber.match(/^[A-Za-z]{2,3}/)?.[0] || flightNumber.substring(0, 2);
+
     const carrierCode = rawCarrierCode?.toUpperCase();
     const flightNum = flightNumber?.replace(/^[A-Z]{2,3}/, "");
-    
+
     let arrivalCode: string = "";
     let departureCode: string = "";
 
     const fetchFlights = async () => {
-      const result = await searchFlightData(flightNum,carrierCode);
+      const result = await searchFlightData(flightNum, carrierCode);
       if (result?.flightInfo) {
         arrivalCode = result.flightInfo.arrivalAirport?.code;
         departureCode = result.flightInfo.departureAirport?.code;
@@ -127,7 +128,7 @@ export default function FlightTrackingDashboard() {
       }
     } catch (error) {
       setFlightData(null);
-      setShowPopup(true); 
+      setShowPopup(true);
     } finally {
       setLoading(false);
     }
@@ -183,17 +184,22 @@ export default function FlightTrackingDashboard() {
 
       {/*        POPUP UI START          */}
       {showPopup && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-          <div className="bg-white p-6 rounded-lg shadow-lg text-center w-[300px]">
-            <h2 className="text-lg font-semibold mb-2">Flight Not Found</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              No flight data found for the entered flight number.
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center backdrop-blur-sm">
+          <div className="bg-card p-8 rounded-xl shadow-2xl text-center w-[340px] border border-border animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-center mb-4">
+              <div className="p-3 bg-destructive/10 rounded-full">
+                <AlertCircle className="h-8 w-8 text-destructive" />
+              </div>
+            </div>
+            <h2 className="text-xl font-bold mb-3 tracking-tight">Flight Data Unavailable</h2>
+            <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
+              We couldn't find any real-time or historical data for this flight number. Please verify the flight number and try again.
             </p>
             <button
               onClick={() => setShowPopup(false)}
-              className="px-5 py-2 bg-primary text-white rounded-md hover:bg-primary/85"
+              className="w-full px-6 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-all active:scale-[0.98]"
             >
-              OK
+              Got it
             </button>
           </div>
         </div>

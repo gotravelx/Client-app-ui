@@ -4,6 +4,9 @@ import { Plane, Wifi, WifiOff, Clock, RefreshCw } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { CONTRACT_ADDRESS } from "@/lib/constants"
 import { Button } from "@/components/ui/button"
+import Image from "next/image"
+import { useTheme } from "next-themes"
+import { useEffect, useState } from "react"
 
 interface NavbarProps {
   isConnected?: boolean
@@ -22,6 +25,13 @@ export function Navbar({
   showRefresh = false,
   lastRefresh,
 }: NavbarProps) {
+  const { theme, resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   const redirectOnApp = () => {
     window.location.href = "https://gotravelx.com"
   }
@@ -37,17 +47,28 @@ export function Navbar({
 
   return (
     <div className="border-b px-4 bg-background dark:bg-background-dark sticky top-0 z-50 backdrop-blur-sm dark:bg-gray-900/95">
-      <div className="flex h-16 items-center">
+      <div className="flex h-20 items-center">
         <div className="flex items-center gap-2 mr-4">
-          <Plane className="h-6 w-6 text-primary" />
-          <h3 onClick={redirectOnApp} className="cursor-pointer flex items-center">
-            <span className="text-xl font-bold">GoTravelX</span>
-          </h3>
-          <span className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-md">Client-realtime-app</span>
+          <div onClick={redirectOnApp} className="cursor-pointer flex items-center">
+            {mounted ? (
+              <Image
+                src={resolvedTheme === "dark" ? "/logo-dark.png" : "/logo-light.png"}
+                alt="GoTravelX Logo"
+                width={240}
+                height={80}
+                className="h-16 w-auto object-contain"
+                priority
+              />
+            ) : (
+              <div className="h-18 w-[186px]" />
+            )}
+          </div>
         </div>
 
         {/* Connection Status */}
         <div className="flex items-center gap-2 mr-4">
+          <span className="bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded-md self-end">Client-realtime-app</span>
+
           {isConnected ? (
             <>
               <Wifi className="h-4 w-4 text-green-500" />
