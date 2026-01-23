@@ -686,15 +686,33 @@ export function FlightCard({ flight, events = [] }: FlightTimelineCardProps) {
               <CardContent className="space-y-6 pt-0">
                 {/* Flight Events Timeline */}
                 <div>
-                  <h4 className="font-semibold mb-4 flex items-center gap-2">
-                    <Activity className="h-4 w-4" />
-                    Flight Timeline Events (OUT → OFF → ON → IN)
-                    {upcomingEvents > 0 && (
-                      <Badge variant="secondary" className="bg-orange-100 text-orange-800">
-                        {upcomingEvents} Upcoming
-                      </Badge>
-                    )}
-                  </h4>
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="font-semibold flex items-center gap-2">
+                      <Activity className="h-4 w-4" />
+                      Flight Timeline Events (OUT → OFF → ON → IN)
+                      {upcomingEvents > 0 && (
+                        <Badge variant="secondary" className="bg-orange-100 text-orange-800">
+                          {upcomingEvents} Upcoming
+                        </Badge>
+                      )}
+                    </h4>
+                    <div className="mr-2">
+                      {(flight.blockchainHash || flight.blockchainTxHash || flight.transactionHash || flight.txHash || events[0]?.transactionHash) ? (
+                        <div
+                          className="inline-flex items-center gap-1 cursor-pointer text-primary hover:underline text-xs font-medium"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(`https://columbus.caminoscan.com/tx/${flight.blockchainHash || flight.blockchainTxHash || flight.transactionHash || flight.txHash || events[0]?.transactionHash}`, '_blank');
+                          }}
+                        >
+                          View Transaction
+                          <ExternalLink className="h-3 w-3" />
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">Verifying...</span>
+                      )}
+                    </div>
+                  </div>
                   {flightEvents.length > 0 ? (
                     <div className="space-y-3">
                       {flightEvents.map((event, index) => {
@@ -716,24 +734,6 @@ export function FlightCard({ flight, events = [] }: FlightTimelineCardProps) {
                                     <div className="flex items-center justify-between mb-1">
                                       <h5 className="font-semibold">{event.title}</h5>
                                       <div className="flex items-center gap-2">
-                                        {event.type === "OUT" && (
-                                          <div className="mr-2">
-                                            {(flight.blockchainHash || flight.blockchainTxHash || flight.transactionHash || flight.txHash || events[0]?.transactionHash) ? (
-                                              <div
-                                                className="inline-flex items-center gap-1 cursor-pointer text-primary hover:underline text-xs font-medium"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  window.open(`https://columbus.caminoscan.com/tx/${flight.blockchainHash || flight.blockchainTxHash || flight.transactionHash || flight.txHash || events[0]?.transactionHash}`, '_blank');
-                                                }}
-                                              >
-                                                View Transaction
-                                                <ExternalLink className="h-3 w-3" />
-                                              </div>
-                                            ) : (
-                                              <span className="text-xs text-muted-foreground italic">Verifying...</span>
-                                            )}
-                                          </div>
-                                        )}
                                         <Badge variant={getEventVariant(event.status)}>{event.type}</Badge>
                                         {event.status === "upcoming" && (
                                           <Badge variant="secondary" className="bg-orange-100 text-orange-800">
