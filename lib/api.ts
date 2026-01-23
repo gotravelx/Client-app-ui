@@ -1,4 +1,4 @@
-const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.test.com';
+const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
 
 const getAuthHeaders = (): HeadersInit => {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -108,7 +108,7 @@ export async function decryptFlightData(encryptedData: string[]) {
 
 export async function searchFlightData(
   flightNumber: string,
-  carrierCode:string
+  carrierCode: string
 ) {
   try {
     const response = await fetchWithRetry(
