@@ -27,9 +27,13 @@ export function Navbar({
 }: NavbarProps) {
   const { theme, resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  const [explorerBaseUrl, setExplorerBaseUrl] = useState("https://columbus.caminoscan.com/address/")
 
   useEffect(() => {
     setMounted(true)
+    if (window.location.hostname === 'localhost' || window.location.hostname === 'client.gotravelx.com') {
+      setExplorerBaseUrl("https://caminoscan.com/address/")
+    }
   }, [])
 
   const redirectOnApp = () => {
@@ -108,7 +112,7 @@ export function Navbar({
           <div className="text-sm hidden lg:block">
             Contract:{" "}
             <a
-              href={`https://columbus.caminoscan.com/address/${CONTRACT_ADDRESS}`}
+              href={`${explorerBaseUrl}${CONTRACT_ADDRESS}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline font-mono"

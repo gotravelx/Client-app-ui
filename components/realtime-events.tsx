@@ -18,12 +18,13 @@ export function RealtimeEvents({ events, onEventsUpdate }: RealtimeEventsProps) 
   const [ws, setWs] = useState<WebSocket | null>(null)
 
   const connectToBlockchain = () => {
+    if (typeof window === "undefined") return;
+
     try {
       const websocket = new WebSocket(WS_PROVIDER_URL)
 
       websocket.onopen = () => {
         setIsConnected(true)
-        console.log("Connected to Camino blockchain")
 
         // Subscribe to contract events
         const subscribeMessage = {
@@ -39,7 +40,9 @@ export function RealtimeEvents({ events, onEventsUpdate }: RealtimeEventsProps) 
           id: 1,
         }
 
-        websocket.send(JSON.stringify(subscribeMessage))
+        if (websocket.readyState === WebSocket.OPEN) {
+          websocket.send(JSON.stringify(subscribeMessage))
+        }
       }
 
       websocket.onmessage = (event) => {
@@ -60,20 +63,22 @@ export function RealtimeEvents({ events, onEventsUpdate }: RealtimeEventsProps) 
             onEventsUpdate([newEvent, ...events.slice(0, 49)]) // Keep last 50 events
           }
         } catch (error) {
+          // Silent parsing error
         }
       }
 
       websocket.onclose = () => {
         setIsConnected(false)
-        console.log("Disconnected from blockchain")
       }
 
-      websocket.onerror = (error) => {
+      websocket.onerror = () => {
         setIsConnected(false)
+        // Silent error handler to avoid MetaMask issues
       }
 
       setWs(websocket)
     } catch (error) {
+      // Silent initialization error
     }
   }
 

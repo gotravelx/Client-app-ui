@@ -697,12 +697,15 @@ export function FlightCard({ flight, events = [] }: FlightTimelineCardProps) {
                       )}
                     </h4>
                     <div className="mr-2">
-                      {(flight.blockchainHash || flight.blockchainTxHash || flight.transactionHash || flight.txHash || events[0]?.transactionHash) ? (
+                      {(flight?.blockchainHash || flight?.blockchainTxHash || flight?.transactionHash || flight?.txHash || events[0]?.transactionHash) ? (
                         <div
                           className="inline-flex items-center gap-1 cursor-pointer text-primary hover:underline text-xs font-medium"
                           onClick={(e) => {
                             e.stopPropagation();
-                            window.open(`https://columbus.caminoscan.com/tx/${flight.blockchainHash || flight.blockchainTxHash || flight.transactionHash || flight.txHash || events[0]?.transactionHash}`, '_blank');
+                            const hash = flight?.blockchainHash || flight?.blockchainTxHash || flight?.transactionHash || flight?.txHash || events[0]?.transactionHash;
+                            const isMainnet = window.location.hostname === 'localhost' || window.location.hostname === 'client.gotravelx.com';
+                            const baseUrl = isMainnet ? 'https://caminoscan.com/tx/' : 'https://columbus.caminoscan.com/tx/';
+                            window.open(`${baseUrl}${hash}`, '_blank');
                           }}
                         >
                           View Transaction

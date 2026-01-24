@@ -19,12 +19,13 @@ export function useBlockchainConnection() {
   }, [])
 
   const connectToBlockchain = () => {
+    if (typeof window === "undefined") return;
+
     try {
       const websocket = new WebSocket(WS_PROVIDER_URL)
 
       websocket.onopen = () => {
         setIsConnected(true)
-        console.log("Connected to Camino blockchain")
 
         // Subscribe to contract events
         const subscribeMessage = {
@@ -40,7 +41,9 @@ export function useBlockchainConnection() {
           id: 1,
         }
 
-        websocket.send(JSON.stringify(subscribeMessage))
+        if (websocket.readyState === WebSocket.OPEN) {
+          websocket.send(JSON.stringify(subscribeMessage))
+        }
       }
 
       websocket.onmessage = (event) => {
@@ -71,22 +74,24 @@ export function useBlockchainConnection() {
             setLastUpdate(new Date())
           }
         } catch (error) {
+          // Silent catch for parsing errors
         }
       }
 
       websocket.onclose = () => {
         setIsConnected(false)
-        console.log("Disconnected from blockchain")
-        // Attempt to reconnect after 5 seconds
-        setTimeout(connectToBlockchain, 5000)
+        // Attempt silent reconnect after delay
+        setTimeout(() => connectToBlockchain(), 5000)
       }
 
-      websocket.onerror = (error) => {
+      websocket.onerror = () => {
         setIsConnected(false)
+        // Silent error handler to avoid triggering wallet extension popups
       }
 
       wsRef.current = websocket
     } catch (error) {
+      // Silent catch for initialization errors
     }
   }
 
