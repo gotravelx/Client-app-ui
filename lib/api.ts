@@ -1,4 +1,4 @@
-const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
+const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || '/api').replace(/\/$/, '');
 
 const getAuthHeaders = (): HeadersInit => {
   return {
@@ -6,11 +6,23 @@ const getAuthHeaders = (): HeadersInit => {
   };
 };
 
-async function fetchWithRetry(url: string, options: RequestInit): Promise<Response> {
-  // Simple fetch without auth logic
-  options.headers = getAuthHeaders();
-  const response = await fetch(url, options);
-  return response;
+async function fetchWithRetry(url: string, options: RequestInit, retries = 1): Promise<Response> {
+  try {
+    // Simple fetch without auth logic
+    options.headers = {
+      ...getAuthHeaders(),
+      ...options.headers,
+    };
+    const response = await fetch(url, options);
+    return response;
+  } catch (error) {
+    if (retries > 0 && error instanceof TypeError) {
+      console.warn(`Fetch failed, retrying... (${retries} left)`, error);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return fetchWithRetry(url, options, retries - 1);
+    }
+    throw error;
+  }
 }
 
 export async function fetchHistoricalFlightData(
