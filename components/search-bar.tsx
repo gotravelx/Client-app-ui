@@ -27,8 +27,8 @@ export function SearchBar({ onSearch, loading }: SearchBarProps) {
           type="text"
           placeholder="Enter flight number UA3682"
           value={flightNumber}
-          onChange={(e) => setFlightNumber(e.target.value)}
-          className="w-full px-4 py-3 pr-12 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+          onChange={(e) => setFlightNumber(e.target.value.toUpperCase())}
+          className="w-full px-4 py-3 pr-12 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none uppercase"
           disabled={loading}
         />
         <button

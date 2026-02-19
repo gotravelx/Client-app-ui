@@ -5,9 +5,10 @@ import { FlightCard } from "@/components/flight-card";
 import { SearchBar } from "@/components/search-bar";
 import { Navbar } from "@/components/navbar";
 import { useBlockchainConnection } from "@/hooks/use-blockchain-connection";
+import { useAuth } from "@/components/auth-provider";
 import { decryptFlightData, fetchHistoricalFlightData, searchFlightData } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, RefreshCw, ShieldCheck, Wallet, ArrowRight } from "lucide-react";
 
 export default function FlightTrackingDashboard() {
   const router = useRouter();
@@ -21,6 +22,30 @@ export default function FlightTrackingDashboard() {
   const [showPopup, setShowPopup] = useState(false);
 
   const { isConnected, lastUpdate, events } = useBlockchainConnection();
+  const { isConnected: isWalletConnected, connect: connectWallet, isConnecting: isWalletConnecting, walletAddress } = useAuth();
+  const [showConnectModal, setShowConnectModal] = useState(false);
+
+  useEffect(() => {
+    // Show connect modal immediately if not connected
+    if (!isWalletConnected) {
+      setShowConnectModal(true);
+    }
+  }, [isWalletConnected]);
+
+  const handleWalletConnect = async () => {
+    await connectWallet();
+  };
+
+  useEffect(() => {
+    if (isWalletConnected) {
+      setShowConnectModal(false);
+    } else {
+      // Clear sensitive/session data on disconnect
+      setFlightData(null);
+      setCurrentFlightNumber("");
+      setLastRefresh(null);
+    }
+  }, [isWalletConnected]);
 
   const handleSearch = async (flightNumber: string) => {
     setLoading(true);
@@ -35,11 +60,13 @@ export default function FlightTrackingDashboard() {
     let arrivalCode: string = "";
     let departureCode: string = "";
 
+    let initialHash: string = "";
     const fetchFlights = async () => {
       const result = await searchFlightData(flightNum, carrierCode);
       if (result?.flightInfo) {
         arrivalCode = result.flightInfo.arrivalAirport?.code;
         departureCode = result.flightInfo.departureAirport?.code;
+        initialHash = result.flightInfo.blockchainHash || "";
       }
     };
 
@@ -52,16 +79,31 @@ export default function FlightTrackingDashboard() {
         dateStr,
         dateStr,
         arrivalCode,
-        departureCode
+        departureCode,
+        walletAddress || undefined
       );
       return result?.flightDetails?.length > 0 ? result : null;
     };
 
     try {
       const today = new Date();
-      const todayStr = today.toISOString().split("T")[0];
+      const startDate = new Date();
+      startDate.setDate(today.getDate() - 3);
 
-      let data = await trySearch(todayStr);
+      const todayStr = today.toISOString().split("T")[0];
+      const startDateStr = startDate.toISOString().split("T")[0];
+
+      const result = await fetchHistoricalFlightData(
+        flightNum,
+        carrierCode,
+        startDateStr,
+        todayStr,
+        arrivalCode,
+        departureCode,
+        walletAddress || undefined
+      );
+
+      let data = result?.flightDetails?.length > 0 ? result : null;
 
       if (!data && events.length > 0) {
         const relatedEvent = events.find(
@@ -78,15 +120,21 @@ export default function FlightTrackingDashboard() {
         }
       }
 
-      if (!data) {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yestStr = yesterday.toISOString().split("T")[0];
-        data = await trySearch(yestStr);
-      }
+      if (data && data.flightDetails?.length > 0) {
+        // Sort to get the latest flight
+        const getSortTime = (f: any) => {
+          const d = f.scheduledDepartureDate ||
+            f.times?.scheduledDeparture ||
+            f.times?.estimatedDeparture ||
+            f.departureDate;
+          return d ? new Date(d).getTime() : 0;
+        };
 
-      if (data) {
-        const flightData = data.flightDetails[0];
+        const sortedFlights = data.flightDetails.sort(
+          (a: any, b: any) => getSortTime(b) - getSortTime(a)
+        );
+
+        const flightData = sortedFlights[0];
 
         const encryptedFields: string[] = [];
         if (flightData.marketedFlightSegments) {
@@ -119,6 +167,11 @@ export default function FlightTrackingDashboard() {
         }
 
         flightData.searchedAt = new Date().toISOString();
+
+        // Ensure hash is preserved
+        if (!flightData.blockchainHash && initialHash) {
+          flightData.blockchainHash = initialHash;
+        }
 
         setFlightData(flightData);
         setLastRefresh(new Date());
@@ -195,16 +248,50 @@ export default function FlightTrackingDashboard() {
             <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
               We couldn't find any real-time or historical data for this flight number. Please verify the flight number and try again.
             </p>
-            <button
-              onClick={() => setShowPopup(false)}
-              className="w-full px-6 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-all active:scale-[0.98]"
-            >
-              Got it
-            </button>
+            <div className="space-y-3">
+              <button
+                onClick={() => setShowPopup(false)}
+                className="w-full px-6 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-all active:scale-[0.98]"
+              >
+                Got it
+              </button>
+            </div>
           </div>
         </div>
       )}
-      {/*        POPUP UI END            */}
+      {/* Simplified Auto-Connect Modal */}
+      {showConnectModal && !isWalletConnected && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+          <div className="bg-card p-6 rounded-xl shadow-lg border border-border max-w-sm w-full animate-in fade-in zoom-in duration-200">
+            <h2 className="text-xl font-bold mb-2">Connect Wallet</h2>
+            <p className="text-sm text-muted-foreground mb-6">
+              Please connect your wallet to access flight subscriptions and history.
+            </p>
+
+            <div className="space-y-3">
+              <button
+                onClick={handleWalletConnect}
+                disabled={isWalletConnecting}
+                className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-all flex items-center justify-center gap-2"
+              >
+                {isWalletConnecting ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Connect Wallet"
+                )}
+              </button>
+
+              <button
+                onClick={() => setShowConnectModal(false)}
+                className="w-full px-4 py-2 bg-secondary text-secondary-foreground rounded-lg font-medium hover:bg-secondary/80 transition-all"
+              >
+                I'll do it later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       <Navbar
         isConnected={isConnected}

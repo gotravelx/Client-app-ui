@@ -43,10 +43,17 @@ export async function fetchHistoricalFlightData(
   toDate: string,
   arrivalCode: string,
   departureCode: string,
+  walletAddress?: string
 ) {
   try {
+    let url = `${baseUrl}/v1/flights/fetch-historical/${flightNumber}/date-range?fromDate=${fromDate}&toDate=${toDate}&carrierCode=${carrierCode}&departureAirport=${departureCode}&arrivalAirport=${arrivalCode}`;
+
+    if (walletAddress) {
+      url += `&walletAddress=${walletAddress}`;
+    }
+
     const response = await fetchWithRetry(
-      `${baseUrl}/v1/flights/fetch-historical/${flightNumber}/date-range?fromDate=${fromDate}&toDate=${toDate}&carrierCode=${carrierCode}&departureAirport=${departureCode}&arrivalAirport=${arrivalCode}`,
+      url,
       {
         method: "GET",
       },

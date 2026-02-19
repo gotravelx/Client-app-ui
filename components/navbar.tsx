@@ -1,12 +1,13 @@
 "use client"
 
-import { Plane, Wifi, WifiOff, Clock, RefreshCw } from "lucide-react"
+import { Plane, Wifi, WifiOff, Clock, RefreshCw, LogOut } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { CONTRACT_ADDRESS } from "@/lib/constants"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
 import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
+import { useAuth } from "@/components/auth-provider"
 
 interface NavbarProps {
   isConnected?: boolean
@@ -26,6 +27,7 @@ export function Navbar({
   lastRefresh,
 }: NavbarProps) {
   const { theme, resolvedTheme } = useTheme()
+  const { isConnected: isConnectedWallet, walletAddress, disconnect: disconnectWallet } = useAuth()
   const [mounted, setMounted] = useState(false)
   const [explorerBaseUrl, setExplorerBaseUrl] = useState("https://columbus.caminoscan.com/address/")
 
@@ -120,6 +122,20 @@ export function Navbar({
               {CONTRACT_ADDRESS ? `${CONTRACT_ADDRESS.substring(0, 6)}...${CONTRACT_ADDRESS.substring(CONTRACT_ADDRESS.length - 4)}` : 'N/A'}
             </a>
           </div>
+
+          {isConnectedWallet && (
+            <div className="flex items-center gap-2">
+              <div className="px-3 py-1 bg-muted rounded-full text-xs font-mono hidden md:block">
+                {walletAddress ? `${walletAddress.substring(0, 6)}...${walletAddress.substring(walletAddress.length - 4)}` : ""}
+              </div>
+              <Button variant="ghost" size="sm" onClick={disconnectWallet}>
+                <LogOut className="h-4 w-4 mr-2" />
+                <span className="hidden sm:inline">Disconnect</span>
+              </Button>
+            </div>
+          )}
+
+
           <ThemeToggle />
         </div>
       </div>

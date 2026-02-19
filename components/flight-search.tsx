@@ -8,12 +8,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Search, Loader2, Plane } from "lucide-react"
 import { fetchHistoricalFlightData, decryptFlightData, searchFlightData } from "@/lib/api"
 import { FlightStatusBadge } from "@/components/flight-status-badge"
+import { useAuth } from "@/components/auth-provider"
 
 interface FlightSearchProps {
   onFlightSelect: (flight: any) => void
 }
 
 export function FlightSearch({ onFlightSelect }: FlightSearchProps) {
+  const { walletAddress } = useAuth()
   const [flightNumber, setFlightNumber] = useState("")
   const [carrierCode, setCarrierCode] = useState("")
   const [fromDate, setFromDate] = useState("")
@@ -25,15 +27,15 @@ export function FlightSearch({ onFlightSelect }: FlightSearchProps) {
     if (!flightNumber || !carrierCode || !fromDate || !toDate) {
       return
     }
-    console.log("flightNumberflightNumber",flightNumber)
+    console.log("flightNumberflightNumber", flightNumber)
 
     setLoading(true)
     try {
-      let arrivalCode: string="" ;
-      let departureCode: string="" ;
-  
+      let arrivalCode: string = "";
+      let departureCode: string = "";
+
       try {
-        const flightInfoResult = await searchFlightData(flightNumber);
+        const flightInfoResult = await searchFlightData(flightNumber, carrierCode);
         if (flightInfoResult?.flightInfo) {
 
           arrivalCode = flightInfoResult?.flightInfo.arrivalAirport?.code;
@@ -42,7 +44,7 @@ export function FlightSearch({ onFlightSelect }: FlightSearchProps) {
       } catch (e) {
         console.warn("Could not fetch flight info for airport codes", e);
       }
-      const data = await fetchHistoricalFlightData(flightNumber, carrierCode, fromDate, toDate,arrivalCode,departureCode)
+      const data = await fetchHistoricalFlightData(flightNumber, carrierCode, fromDate, toDate, arrivalCode, departureCode, walletAddress || undefined)
 
       // Decrypt encrypted data if present
       const encryptedFields = []
@@ -95,7 +97,8 @@ export function FlightSearch({ onFlightSelect }: FlightSearchProps) {
             id="flightNumber"
             placeholder="e.g., 3682"
             value={flightNumber}
-            onChange={(e) => setFlightNumber(e.target.value)}
+            onChange={(e) => setFlightNumber(e.target.value.toUpperCase())}
+            className="uppercase"
           />
         </div>
         <div>
@@ -104,7 +107,8 @@ export function FlightSearch({ onFlightSelect }: FlightSearchProps) {
             id="carrierCode"
             placeholder="e.g., UA"
             value={carrierCode}
-            onChange={(e) => setCarrierCode(e.target.value)}
+            onChange={(e) => setCarrierCode(e.target.value.toUpperCase())}
+            className="uppercase"
           />
         </div>
         <div>

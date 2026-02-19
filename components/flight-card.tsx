@@ -81,20 +81,36 @@ export function FlightCard({ flight, events = [] }: FlightTimelineCardProps) {
   }
 
   const convertToLocalTime = (utcTime: string, airportCode: string) => {
-    if (!utcTime || utcTime === "") return null
+    // Fallback to scheduledDepartureDate if utcTime is missing (common for historical data)
+    const timeToParse = utcTime || flight?.scheduledDepartureDate;
+    if (!timeToParse || timeToParse === "") return null
 
     try {
       const timezone = getAirportTimezone(airportCode)
-
-      // Parse in the airport's timezone, but keep local clock time
-      const localTime = moment.tz(utcTime, timezone)
+      const localTime = moment.tz(timeToParse, timezone)
 
       if (!localTime.isValid()) return null
 
+      // Use the timezone's relative today/yesterday for the label
+      const nowInTimezone = moment.tz(timezone).startOf('day')
+      const yesterdayInTimezone = moment.tz(timezone).subtract(1, 'day').startOf('day')
+      const targetDate = moment(localTime).startOf('day')
+      const fullDateStr = localTime.format("dddd DD-MMM-YYYY")
+
+      let dateLabel = ""
+      if (targetDate.isSame(nowInTimezone, 'day')) {
+        dateLabel = "Today"
+      } else if (targetDate.isSame(yesterdayInTimezone, 'day')) {
+        dateLabel = "Yesterday"
+      } else {
+        dateLabel = fullDateStr
+      }
+
       return {
-        time: localTime.format("h:mm A"), // 9:35 AM
-        date: localTime.format("dddd DD-MMM-YYYY"), // Thursday 25-Sep-2025
-        timezone: localTime.format("z"), // CDT, EDT, etc.
+        time: localTime.isValid() && utcTime ? localTime.format("h:mm A") : "N/A",
+        date: dateLabel,
+        fullDateString: fullDateStr,
+        timezone: localTime.format("z"),
         full: localTime,
         raw: localTime.format(),
       }
@@ -526,7 +542,7 @@ export function FlightCard({ flight, events = [] }: FlightTimelineCardProps) {
                   <ArrowRight className="h-4 w-4 text-muted-foreground" />
                   <span className="font-semibold">{flight.arrivalAirport?.code}</span>
                 </div>
-                <div className="text-muted-foreground">{departureLocal.scheduled?.date || "N/A"}</div>
+                <div className="text-muted-foreground">{departureLocal.scheduled?.fullDateString || "N/A"}</div>
               </div>
 
               {/* Flight Route with Times */}
