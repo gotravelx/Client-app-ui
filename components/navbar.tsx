@@ -86,7 +86,7 @@ export function Navbar({
           )}
 
           {lastUpdate && (
-            <div className="items-center gap-1 text-sm text-muted-foreground hidden md:flex">
+            <div className="items-center gap-1 text-[10px] md:text-sm text-muted-foreground hidden md:flex">
               <Clock className="h-3 w-3" />
               <span>Last: {formatTime(lastUpdate)}</span>
             </div>
@@ -98,7 +98,7 @@ export function Navbar({
           {showRefresh && onRefresh && (
             <div className="flex items-center gap-2">
               {lastRefresh && (
-                <span className="text-sm text-muted-foreground hidden lg:inline">
+                <span className="text-[10px] lg:text-sm text-muted-foreground hidden lg:inline">
                   Updated: {formatTime(lastRefresh)}
                 </span>
               )}

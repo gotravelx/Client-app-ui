@@ -7,7 +7,7 @@ import { Navbar } from "@/components/navbar";
 import { useBlockchainConnection } from "@/hooks/use-blockchain-connection";
 import { decryptFlightData, fetchHistoricalFlightData, searchFlightData } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Activity } from "lucide-react";
 
 export default function FlightTrackingDashboard() {
   const router = useRouter();
@@ -85,8 +85,32 @@ export default function FlightTrackingDashboard() {
         data = await trySearch(yestStr);
       }
 
-      if (data) {
-        const flightData = data.flightDetails[0];
+      if (!data) {
+        const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+        const thirtyStr = thirtyDaysAgo.toISOString().split("T")[0];
+
+        const historicalData = await fetchHistoricalFlightData(
+          flightNum,
+          carrierCode,
+          thirtyStr,
+          todayStr,
+          arrivalCode,
+          departureCode
+        );
+
+        if (historicalData?.flightDetails?.length > 0) {
+          data = historicalData;
+        }
+      }
+
+      if (data?.flightDetails?.length > 0) {
+        // Always sort to pick the absolute latest record found
+        const sortedDetails = [...data.flightDetails].sort((a: any, b: any) =>
+          new Date(b.scheduledDepartureDate || b.departureDate).getTime() -
+          new Date(a.scheduledDepartureDate || a.departureDate).getTime()
+        );
+
+        const flightData = sortedDetails[0];
 
         const encryptedFields: string[] = [];
         if (flightData.marketedFlightSegments) {
@@ -223,7 +247,7 @@ export default function FlightTrackingDashboard() {
           </p>
         </div>
 
-        {flightData && (
+        {flightData ? (
           <div className="mt-8">
             <FlightCard
               flight={flightData}
@@ -243,6 +267,43 @@ export default function FlightTrackingDashboard() {
               </button>
             </div>
           </div>
+        ) : (
+          !loading && events.length > 0 && (
+            <div className="mt-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center gap-2 mb-4">
+                <Activity className="h-5 w-5 text-primary" />
+                <h3 className="text-lg font-semibold">Latest Blockchain Activity</h3>
+              </div>
+              <div className="grid gap-3">
+                {events.slice(0, 3).map((event, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-4 bg-card border border-border rounded-xl shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 bg-primary/10 rounded-full">
+                        <Activity className="h-4 w-4 text-primary" />
+                      </div>
+                      <div>
+                        <div className="font-medium">{event.type || "Flight Event"}</div>
+                        <div className="text-sm text-muted-foreground">{event.description}</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-mono text-muted-foreground">
+                        {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                      {event.flightNumber && (
+                        <div className="text-xs font-bold text-primary mt-1 underline cursor-pointer" onClick={() => handleSearch(event.flightNumber)}>
+                          Track {event.flightNumber}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
         )}
       </div>
     </div>
