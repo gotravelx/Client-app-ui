@@ -35,9 +35,11 @@ export default function FlightTrackingDashboard() {
     let arrivalCode: string = "";
     let departureCode: string = "";
 
+    let realTimeData: any = null;
     const fetchFlights = async () => {
       const result = await searchFlightData(flightNum, carrierCode);
       if (result?.flightInfo) {
+        realTimeData = result.flightInfo;
         arrivalCode = result.flightInfo.arrivalAirport?.code;
         departureCode = result.flightInfo.departureAirport?.code;
       }
@@ -61,7 +63,16 @@ export default function FlightTrackingDashboard() {
       const today = new Date();
       const todayStr = today.toISOString().split("T")[0];
 
-      let data = await trySearch(todayStr);
+      let data: any = null;
+
+      // Use real-time data if it's for today
+      if (realTimeData && realTimeData?.departureDate === todayStr) {
+        data = { flightDetails: [realTimeData] };
+      }
+
+      if (!data) {
+        data = await trySearch(todayStr);
+      }
 
       if (!data && events.length > 0) {
         const relatedEvent = events.find(
@@ -105,10 +116,11 @@ export default function FlightTrackingDashboard() {
 
       if (data?.flightDetails?.length > 0) {
         // Always sort to pick the absolute latest record found
-        const sortedDetails = [...data.flightDetails].sort((a: any, b: any) =>
-          new Date(b.scheduledDepartureDate || b.departureDate).getTime() -
-          new Date(a.scheduledDepartureDate || a.departureDate).getTime()
-        );
+        const sortedDetails = [...data.flightDetails].sort((a: any, b: any) => {
+          const timeA = new Date(a.times?.scheduledDeparture || a.scheduledDepartureDate || a.departureDate).getTime();
+          const timeB = new Date(b.times?.scheduledDeparture || b.scheduledDepartureDate || b.departureDate).getTime();
+          return timeB - timeA;
+        });
 
         const flightData = sortedDetails[0];
 

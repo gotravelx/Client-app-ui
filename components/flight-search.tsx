@@ -25,24 +25,28 @@ export function FlightSearch({ onFlightSelect }: FlightSearchProps) {
     if (!flightNumber || !carrierCode || !fromDate || !toDate) {
       return
     }
-    console.log("flightNumberflightNumber",flightNumber)
+    console.log("flightNumberflightNumber", flightNumber)
 
     setLoading(true)
     try {
-      let arrivalCode: string="" ;
-      let departureCode: string="" ;
-  
-      try {
-        const flightInfoResult = await searchFlightData(flightNumber);
-        if (flightInfoResult?.flightInfo) {
+      let arrivalCode: string = "";
+      let departureCode: string = "";
 
+      try {
+        const flightInfoResult = await searchFlightData(flightNumber, carrierCode);
+        if (flightInfoResult?.flightInfo) {
           arrivalCode = flightInfoResult?.flightInfo.arrivalAirport?.code;
           departureCode = flightInfoResult?.flightInfo.departureAirport?.code;
         }
       } catch (e) {
         console.warn("Could not fetch flight info for airport codes", e);
       }
-      const data = await fetchHistoricalFlightData(flightNumber, carrierCode, fromDate, toDate,arrivalCode,departureCode)
+      const data = await fetchHistoricalFlightData(flightNumber, carrierCode, fromDate, toDate, arrivalCode, departureCode)
+
+      if (!data || !data.flightDetails) {
+        setSearchResults([]);
+        return;
+      }
 
       // Decrypt encrypted data if present
       const encryptedFields = []
@@ -62,7 +66,9 @@ export function FlightSearch({ onFlightSelect }: FlightSearchProps) {
       }
 
       if (encryptedFields.length > 0) {
-        const decryptedData = await decryptFlightData(encryptedFields)
+        const response = await decryptFlightData(encryptedFields)
+        const decryptedData = response.decryptedData || []
+
         // Apply decrypted data back to the results
         let decryptIndex = 0
         for (const flight of data.flightDetails) {
@@ -79,7 +85,14 @@ export function FlightSearch({ onFlightSelect }: FlightSearchProps) {
         }
       }
 
-      setSearchResults(data.flightDetails || [])
+      // Sort results by latest date/time
+      const sortedResults = [...data.flightDetails].sort((a, b) => {
+        const timeA = new Date(a.times?.scheduledDeparture || a.scheduledDepartureDate || a.departureDate).getTime();
+        const timeB = new Date(b.times?.scheduledDeparture || b.scheduledDepartureDate || b.departureDate).getTime();
+        return timeB - timeA;
+      });
+
+      setSearchResults(sortedResults)
     } catch (error) {
     } finally {
       setLoading(false)
@@ -137,10 +150,10 @@ export function FlightSearch({ onFlightSelect }: FlightSearchProps) {
                     <Plane className="h-5 w-5" />
                     {flight.carrierCode} {flight.flightNumber}
                   </CardTitle>
-                  <FlightStatusBadge status={flight.status?.statusCode || flight.flightStatus} />
+                  <FlightStatusBadge status={flight.status?.legStatus || flight.flightStatus} />
                 </div>
                 <CardDescription>
-                  {flight.departureCity} ({flight.departureAirport}) → {flight.arrivalCity} ({flight.arrivalAirport})
+                  {flight.departureCity} ({flight.departureAirport?.code || flight.departureAirport}) → {flight.arrivalCity} ({flight.arrivalAirport?.code || flight.arrivalAirport})
                 </CardDescription>
               </CardHeader>
               <CardContent>

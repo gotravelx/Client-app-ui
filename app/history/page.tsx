@@ -34,19 +34,19 @@ export default function HistoryPage() {
     if (!flightNumber) return;
 
     try {
-      let arrivalCode: string ="";
-      let departureCode: string="";
+      let arrivalCode: string = "";
+      let departureCode: string = "";
       const match = flightNumber.match(/^([A-Z]{2,3})(\d+)$/);
 
       if (!match) {
         throw new Error("Invalid flight number format");
       }
-      
+
       const CarrierCode = match[1].toUpperCase();
-      const flightNum = match[2];   
-  
+      const flightNum = match[2];
+
       try {
-        const flightInfoResult = await searchFlightData(flightNum,CarrierCode);
+        const flightInfoResult = await searchFlightData(flightNum, CarrierCode);
         if (flightInfoResult?.flightInfo) {
           arrivalCode = flightInfoResult.flightInfo.arrivalAirport?.code;
           departureCode = flightInfoResult.flightInfo.departureAirport?.code;
@@ -62,7 +62,7 @@ export default function HistoryPage() {
 
       const carrierCode =
         flightNumber.match(/^[A-Z]{2,3}/)?.[0] || flightNumber.substring(0, 2);
-     
+
 
       const data = await fetchHistoricalFlightData(
         flightNum,
@@ -116,11 +116,11 @@ export default function HistoryPage() {
         }
 
         // Sort flights by date (newest first)
-        const sortedFlights = processedFlights.sort(
-          (a, b) =>
-            new Date(b.scheduledDepartureDate).getTime() -
-            new Date(a.scheduledDepartureDate).getTime()
-        );
+        const sortedFlights = processedFlights.sort((a, b) => {
+          const timeA = new Date(a.times?.scheduledDeparture || a.scheduledDepartureDate).getTime();
+          const timeB = new Date(b.times?.scheduledDeparture || b.scheduledDepartureDate).getTime();
+          return timeB - timeA;
+        });
 
         setFlights(sortedFlights);
         setFilteredFlights(sortedFlights);
@@ -345,8 +345,8 @@ export default function HistoryPage() {
               <p className="text-muted-foreground text-md">
                 {selectedDate
                   ? `No flights found for ${moment(selectedDate).format(
-                      "MMMM DD, YYYY"
-                    )}`
+                    "MMMM DD, YYYY"
+                  )}`
                   : "No historical flight data available for this flight number"}
               </p>
             </div>
