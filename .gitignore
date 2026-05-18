@@ -15,9 +15,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
-coverage
 
 # env files
+.env*
 .env
 
 # vercel
@@ -26,3 +26,6 @@ coverage
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# test coverage
+coverage/

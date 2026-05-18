@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FlightCard } from "@/components/flight-card";
 import { Navbar } from "@/components/navbar";
 import { useBlockchainConnection } from "@/hooks/use-blockchain-connection";
-import { decryptFlightData, fetchHistoricalFlightData } from "@/lib/api";
+import { decryptFlightData, fetchHistoricalFlightData, searchFlightData } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Calendar, Filter, X } from "lucide-react";
 import {
@@ -34,20 +34,43 @@ export default function HistoryPage() {
     if (!flightNumber) return;
 
     try {
+      let arrivalCode: string = "";
+      let departureCode: string = "";
+      const match = flightNumber.match(/^([A-Z]{2,3})(\d+)$/);
+
+      if (!match) {
+        throw new Error("Invalid flight number format");
+      }
+
+      const CarrierCode = match[1].toUpperCase();
+      const flightNum = match[2];
+
+      try {
+        const flightInfoResult = await searchFlightData(flightNum, CarrierCode);
+        if (flightInfoResult?.flightInfo) {
+          arrivalCode = flightInfoResult.flightInfo.arrivalAirport?.code;
+          departureCode = flightInfoResult.flightInfo.departureAirport?.code;
+        }
+      } catch (e) {
+        console.warn("Could not fetch flight info for airport codes", e);
+      }
+
       const endDate = new Date().toISOString().split("T")[0];
-      const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      const startDate = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000)
         .toISOString()
         .split("T")[0];
 
       const carrierCode =
         flightNumber.match(/^[A-Z]{2,3}/)?.[0] || flightNumber.substring(0, 2);
-      const flightNum = flightNumber.replace(/^[A-Z]{2,3}/, "");
+
 
       const data = await fetchHistoricalFlightData(
         flightNum,
         carrierCode,
         startDate,
-        endDate
+        endDate,
+        arrivalCode,
+        departureCode
       );
 
       if (data && data.flightDetails) {
@@ -93,11 +116,11 @@ export default function HistoryPage() {
         }
 
         // Sort flights by date (newest first)
-        const sortedFlights = processedFlights.sort(
-          (a, b) =>
-            new Date(b.scheduledDepartureDate).getTime() -
-            new Date(a.scheduledDepartureDate).getTime()
-        );
+        const sortedFlights = processedFlights.sort((a, b) => {
+          const timeA = new Date(a.times?.scheduledDeparture || a.scheduledDepartureDate).getTime();
+          const timeB = new Date(b.times?.scheduledDeparture || b.scheduledDepartureDate).getTime();
+          return timeB - timeA;
+        });
 
         setFlights(sortedFlights);
         setFilteredFlights(sortedFlights);
@@ -246,8 +269,8 @@ export default function HistoryPage() {
       />
 
       <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="mb-4 flex items-center justify-start gap-3">
-          <Button className="font-bold" onClick={() => window.history.back()}>
+        <div className="mb-4 flex items-center justify-start gap-3 ">
+          <Button className="font-bold mb-2" onClick={() => window.history.back()}>
             <ArrowLeft className="font-bold" />
             Back
           </Button>
@@ -322,8 +345,8 @@ export default function HistoryPage() {
               <p className="text-muted-foreground text-md">
                 {selectedDate
                   ? `No flights found for ${moment(selectedDate).format(
-                      "MMMM DD, YYYY"
-                    )}`
+                    "MMMM DD, YYYY"
+                  )}`
                   : "No historical flight data available for this flight number"}
               </p>
             </div>
