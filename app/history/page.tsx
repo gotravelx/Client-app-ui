@@ -46,6 +46,9 @@ export default function HistoryPage() {
     }
 
     try {
+      let arrivalCode: string = "";
+      let departureCode: string = "";
+
       const match = flightNumber.match(/^([A-Z]{2,3})(\d+)$/);
       if (!match) {
         throw new Error("Invalid flight number format");
@@ -57,14 +60,15 @@ export default function HistoryPage() {
       setLoading(true);
 
       // 1. Fetch flight info to get airport codes
-      const [flightInfoResult] = await Promise.all([
-        searchFlightData(flightNum, CarrierCode).catch(() => null)
-      ]);
-
-
-
-      const arrivalCode = flightInfoResult?.flightInfo?.arrivalAirport?.code || "";
-      const departureCode = flightInfoResult?.flightInfo?.departureAirport?.code || "";
+      try {
+        const flightInfoResult = await searchFlightData(flightNum, CarrierCode);
+        if (flightInfoResult?.flightInfo) {
+          arrivalCode = flightInfoResult.flightInfo.arrivalAirport?.code || "";
+          departureCode = flightInfoResult.flightInfo.departureAirport?.code || "";
+        }
+      } catch (e) {
+        console.warn("Could not fetch flight info for airport codes", e);
+      }
 
       const endDate = new Date().toISOString().split("T")[0];
       const startDate = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000)
@@ -109,7 +113,8 @@ export default function HistoryPage() {
         // Single API call instead of loops
         if (allEncryptedStrings.length > 0) {
           try {
-            const decryptedValues = await decryptFlightData(allEncryptedStrings);
+            const decryptedData = await decryptFlightData(allEncryptedStrings);
+            const decryptedValues = decryptedData.decryptedData || [];
             for (let i = 0; i < decryptedValues.length; i++) {
               if (decryptedValues[i]) {
                 updateTargets[i].obj[updateTargets[i].key] = decryptedValues[i];
@@ -234,8 +239,6 @@ export default function HistoryPage() {
 
     return () => clearInterval(interval);
   }, [flightNumber]);
-
-
 
   if (loading) {
     return (

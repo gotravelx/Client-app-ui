@@ -7,8 +7,9 @@ import { Navbar } from "@/components/navbar";
 import { useAuth } from "@/components/auth-provider";
 import { decryptFlightData, fetchHistoricalFlightData, searchFlightData } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { AlertCircle, RefreshCw, Info } from "lucide-react";
+import { AlertCircle, RefreshCw, Info, Activity } from "lucide-react";
 import { WalletSelectorModal } from "@/components/wallet-selector-modal";
+import { useBlockchainConnection } from "@/hooks/use-blockchain-connection";
 
 export default function FlightTrackingDashboard() {
   const router = useRouter();
@@ -23,34 +24,36 @@ export default function FlightTrackingDashboard() {
   const [popupTitle, setPopupTitle] = useState("Flight Data Unavailable");
   const [popupDescription, setPopupDescription] = useState("We couldn't find any real-time or historical data for this flight number. Please verify the flight number and try again.");
 
-     const { isConnected: isWalletConnected, connect: connectWallet, isConnecting: isWalletConnecting, walletAddress, error: walletError } = useAuth();
-     const [activeConnecting, setActiveConnecting] = useState<"metamask" | "coinbase" | "trust" | null>(null);
-     const [mounted, setMounted] = useState(false);
-     const [isModalDismissed, setIsModalDismissed] = useState(false);
+  const { isConnected: isWalletConnected, connect: connectWallet, isConnecting: isWalletConnecting, walletAddress, error: walletError } = useAuth();
+  const [activeConnecting, setActiveConnecting] = useState<"metamask" | "coinbase" | "trust" | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const [isModalDismissed, setIsModalDismissed] = useState(false);
 
-     useEffect(() => {
-       setMounted(true);
-     }, []);
+  const { isConnected, lastUpdate, events } = useBlockchainConnection();
 
-     const handleWalletConnect = async (type: "metamask" | "coinbase" | "trust") => {
-       try {
-         setActiveConnecting(type);
-         await connectWallet(type);
-       } catch (err) {
-         console.error("Failed to connect wallet:", err);
-       } finally {
-         setActiveConnecting(null);
-       }
-     };
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-     useEffect(() => {
-       if (!isWalletConnected) {
-         // Clear sensitive/session data on disconnect
-         setFlightData(null);
-         setCurrentFlightNumber("");
-         setLastRefresh(null);
-       }
-     }, [isWalletConnected]);
+  const handleWalletConnect = async (type: "metamask" | "coinbase" | "trust") => {
+    try {
+      setActiveConnecting(type);
+      await connectWallet(type);
+    } catch (err) {
+      console.error("Failed to connect wallet:", err);
+    } finally {
+      setActiveConnecting(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!isWalletConnected) {
+      // Clear sensitive/session data on disconnect
+      setFlightData(null);
+      setCurrentFlightNumber("");
+      setLastRefresh(null);
+    }
+  }, [isWalletConnected]);
 
   const handleSearch = async (flightNumber: string) => {
     if (!isWalletConnected) {
@@ -72,10 +75,12 @@ export default function FlightTrackingDashboard() {
     let arrivalCode: string = "";
     let departureCode: string = "";
 
+    let realTimeData: any = null;
     let initialHash: string = "";
     const fetchFlights = async () => {
       const result = await searchFlightData(flightNum, carrierCode);
       if (result?.flightInfo) {
+        realTimeData = result.flightInfo;
         arrivalCode = result.flightInfo.arrivalAirport?.code;
         departureCode = result.flightInfo.departureAirport?.code;
         initialHash = result.flightInfo.blockchainHash || "";
@@ -98,41 +103,69 @@ export default function FlightTrackingDashboard() {
     try {
       await fetchFlights();
       const today = new Date();
-      const startDate = new Date();
-      startDate.setDate(today.getDate() - 3);
-
       const todayStr = today.toISOString().split("T")[0];
-      const startDateStr = startDate.toISOString().split("T")[0];
 
-      const result = await fetchHistoricalFlightData(
-        flightNum,
-        carrierCode,
-        startDateStr,
-        todayStr,
-        arrivalCode,
-        departureCode,
-        walletAddress || undefined
-      );
+      let data: any = null;
 
-      let data = result?.flightDetails?.length > 0 ? result : null;
+      // Use real-time data if it's for today
+      if (realTimeData && realTimeData?.departureDate === todayStr) {
+        data = { flightDetails: [realTimeData] };
+      }
 
+      if (!data) {
+        data = await trySearch(todayStr);
+      }
 
-
-      if (data && data.flightDetails?.length > 0) {
-        // Sort to get the latest flight
-        const getSortTime = (f: any) => {
-          const d = f.scheduledDepartureDate ||
-            f.times?.scheduledDeparture ||
-            f.times?.estimatedDeparture ||
-            f.departureDate;
-          return d ? new Date(d).getTime() : 0;
-        };
-
-        const sortedFlights = data.flightDetails.sort(
-          (a: any, b: any) => getSortTime(b) - getSortTime(a)
+      if (!data && events.length > 0) {
+        const relatedEvent = events.find(
+          (e) =>
+            e.flightNumber === flightNumber ||
+            e.description?.includes(flightNumber)
         );
 
-        const flightData = sortedFlights[0];
+        if (relatedEvent?.timestamp) {
+          const eventDate = new Date(relatedEvent.timestamp)
+            .toISOString()
+            .split("T")[0];
+          data = await trySearch(eventDate);
+        }
+      }
+
+      if (!data) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yestStr = yesterday.toISOString().split("T")[0];
+        data = await trySearch(yestStr);
+      }
+
+      if (!data) {
+        const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+        const thirtyStr = thirtyDaysAgo.toISOString().split("T")[0];
+
+        const historicalData = await fetchHistoricalFlightData(
+          flightNum,
+          carrierCode,
+          thirtyStr,
+          todayStr,
+          arrivalCode,
+          departureCode,
+          walletAddress || undefined
+        );
+
+        if (historicalData?.flightDetails?.length > 0) {
+          data = historicalData;
+        }
+      }
+
+      if (data?.flightDetails?.length > 0) {
+        // Always sort to pick the absolute latest record found
+        const sortedDetails = [...data.flightDetails].sort((a: any, b: any) => {
+          const timeA = new Date(a.times?.scheduledDeparture || a.scheduledDepartureDate || a.departureDate).getTime();
+          const timeB = new Date(b.times?.scheduledDeparture || b.scheduledDepartureDate || b.departureDate).getTime();
+          return timeB - timeA;
+        });
+
+        const flightData = sortedDetails[0];
 
         const encryptedFields: string[] = [];
         if (flightData.marketedFlightSegments) {
@@ -223,7 +256,21 @@ export default function FlightTrackingDashboard() {
     return () => clearInterval(interval);
   }, [currentFlightNumber]);
 
+  useEffect(() => {
+    if (events.length > 0 && currentFlightNumber) {
+      const latestEvent = events[0];
+      if (
+        latestEvent.flightNumber === currentFlightNumber ||
+        latestEvent.description?.includes(currentFlightNumber)
+      ) {
+        const debounce = setTimeout(() => {
+          handleSearch(currentFlightNumber);
+        }, 1000);
 
+        return () => clearTimeout(debounce);
+      }
+    }
+  }, [events, currentFlightNumber]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -265,8 +312,9 @@ export default function FlightTrackingDashboard() {
         activeConnecting={activeConnecting}
       />
 
-
       <Navbar
+        isConnected={isConnected}
+        lastUpdate={lastUpdate}
         onRefresh={handleRefresh}
         refreshing={refreshing}
         showRefresh={!!currentFlightNumber}
@@ -285,7 +333,11 @@ export default function FlightTrackingDashboard() {
           <div className="mt-8">
             <FlightCard
               flight={flightData}
-              events={[]}
+              events={events.filter(
+                (e) =>
+                  e.flightNumber === currentFlightNumber ||
+                  e.description?.includes(currentFlightNumber)
+              )}
             />
 
             <div className="mt-6 text-center">
@@ -295,6 +347,43 @@ export default function FlightTrackingDashboard() {
               >
                 View Historical Data (Last 30 Days)
               </button>
+            </div>
+          </div>
+        )}
+
+        {!flightData && !loading && events.length > 0 && (
+          <div className="mt-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex items-center gap-2 mb-4">
+              <Activity className="h-5 w-5 text-primary" />
+              <h3 className="text-lg font-semibold">Latest Blockchain Activity</h3>
+            </div>
+            <div className="grid gap-3">
+              {events.slice(0, 3).map((event, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between p-4 bg-card border border-border rounded-xl shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="p-2 bg-primary/10 rounded-full">
+                      <Activity className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <div className="font-medium">{event.type || "Flight Event"}</div>
+                      <div className="text-sm text-muted-foreground">{event.description}</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs font-mono text-muted-foreground">
+                      {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                    {event.flightNumber && (
+                      <div className="text-xs font-bold text-primary mt-1 underline cursor-pointer" onClick={() => handleSearch(event.flightNumber)}>
+                        Track {event.flightNumber}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
