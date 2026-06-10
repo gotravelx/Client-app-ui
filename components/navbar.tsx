@@ -1,4 +1,4 @@
-use client"
+"use client"
 
 import { RefreshCw, LogOut, Wallet, ChevronDown, User, Wifi, WifiOff, Clock } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
