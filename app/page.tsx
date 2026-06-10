@@ -105,6 +105,25 @@ export default function FlightTrackingDashboard() {
       const today = new Date();
       const todayStr = today.toISOString().split("T")[0];
 
+      // Verify subscription access before showing any data
+      try {
+        await fetchHistoricalFlightData(
+          flightNum, carrierCode, todayStr, todayStr,
+          arrivalCode, departureCode, walletAddress || undefined
+        );
+      } catch (accessError: any) {
+        const accessMsg = accessError?.message || "";
+        if (accessError?.status === 403 || accessMsg.toLowerCase().includes("not subscribed")) {
+          setFlightData(null);
+          setPopupTitle("Subscription Required");
+          setPopupDescription(accessMsg || "You are not subscribed to this flight. Please subscribe to access its real-time and historical data.");
+          setShowPopup(true);
+          setLoading(false);
+          return;
+        }
+        // For non-subscription errors, continue with normal flow
+      }
+
       let data: any = null;
 
       // Use real-time data if it's for today
@@ -214,12 +233,15 @@ export default function FlightTrackingDashboard() {
       }
     } catch (error: any) {
       setFlightData(null);
-      if (error?.status === 403) {
-        setPopupTitle("Access Denied");
-        setPopupDescription("You are not subscribed to this flight. Please subscribe to access its real-time and historical data.");
+      const apiMessage = error?.message || "";
+      const isNotSubscribed = error?.status === 403 || apiMessage.toLowerCase().includes("not subscribed");
+      
+      if (isNotSubscribed) {
+        setPopupTitle("Subscription Required");
+        setPopupDescription(apiMessage || "You are not subscribed to this flight. Please subscribe to access its real-time and historical data.");
       } else {
         setPopupTitle("Flight Data Unavailable");
-        setPopupDescription("We couldn't find any real-time or historical data for this flight number. Please verify the flight number and try again.");
+        setPopupDescription(apiMessage || "We couldn't find any real-time or historical data for this flight number. Please verify the flight number and try again.");
       }
       setShowPopup(true);
     } finally {
@@ -313,8 +335,6 @@ export default function FlightTrackingDashboard() {
       />
 
       <Navbar
-        isConnected={isConnected}
-        lastUpdate={lastUpdate}
         onRefresh={handleRefresh}
         refreshing={refreshing}
         showRefresh={!!currentFlightNumber}

@@ -7,13 +7,8 @@ import { Navbar } from "@/components/navbar";
 import { useAuth } from "@/components/auth-provider";
 import { decryptFlightData, fetchHistoricalFlightData, searchFlightData } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calendar, Filter, X } from "lucide-react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, Filter, ShieldAlert } from "lucide-react";
 import moment from "moment-timezone";
 
 export default function HistoryPage() {
@@ -25,9 +20,8 @@ export default function HistoryPage() {
   const [filteredFlights, setFilteredFlights] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string>("");
-  const [availableDates, setAvailableDates] = useState<string[]>([]);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { walletAddress, isConnected: isWalletConnected } = useAuth();
 
   // Redirect to home if wallet is disconnected
@@ -45,6 +39,7 @@ export default function HistoryPage() {
       return;
     }
 
+    setErrorMessage(null);
     try {
       let arrivalCode: string = "";
       let departureCode: string = "";
@@ -142,20 +137,16 @@ export default function HistoryPage() {
         setFlights(sortedFlights);
         setFilteredFlights(sortedFlights);
 
-        // Extract available dates
-        const dates: string[] = Array.from(
-          new Set<string>(
-            sortedFlights
-              .map((f: any) => f.scheduledDepartureDate as string)
-              .filter((d: any): d is string => typeof d === "string" && d !== "")
-          )
-        ).sort().reverse();
-
-        setAvailableDates(dates);
         setLastRefresh(new Date());
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching historical data:", error);
+      const apiMsg = error?.message || "";
+      if (error?.status === 403 || apiMsg.toLowerCase().includes("not subscribed")) {
+        setErrorMessage(apiMsg || "You are not subscribed to this flight. Please subscribe to access its data.");
+      } else if (apiMsg) {
+        setErrorMessage(apiMsg);
+      }
     } finally {
       setLoading(false);
     }
@@ -168,21 +159,6 @@ export default function HistoryPage() {
     } finally {
       setRefreshing(false);
     }
-  };
-
-  const handleDateFilter = (date: string) => {
-    setSelectedDate(date);
-    if (date) {
-      const filtered = flights.filter((f: any) => f.scheduledDepartureDate === date);
-      setFilteredFlights(filtered);
-    } else {
-      setFilteredFlights(flights);
-    }
-  };
-
-  const clearFilter = () => {
-    setSelectedDate("");
-    setFilteredFlights(flights);
   };
 
   const formatDateLabel = (input: any) => {
@@ -299,69 +275,22 @@ export default function HistoryPage() {
               </p>
             </div>
           </div>
-
-          {flights.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant={selectedDate ? "default" : "outline"}
-                    className="gap-2"
-                  >
-                    <Calendar className="h-4 w-4" />
-                    {selectedDate
-                      ? moment(selectedDate).format("MMM DD, YYYY")
-                      : "Filter by Date"}
-                    {selectedDate && (
-                      <X
-                        className="h-3 w-3 ml-1 hover:text-destructive"
-                        onClick={(e: React.MouseEvent) => {
-                          e.stopPropagation();
-                          clearFilter();
-                        }}
-                      />
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-56 p-2" align="end">
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium px-2 py-1.5 text-muted-foreground">
-                      Available Dates
-                    </p>
-                    <div className="max-h-60 overflow-y-auto pr-1">
-                      {availableDates.map((date) => (
-                        <button
-                          key={date}
-                          onClick={() => handleDateFilter(date)}
-                          className={`w-full text-left px-2 py-1.5 text-sm rounded-md transition-colors ${selectedDate === date
-                            ? "bg-primary text-primary-foreground"
-                            : "hover:bg-muted"
-                            }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span>{moment(date).format("MMM DD, YYYY")}</span>
-                            <span className="text-[10px] opacity-70">
-                              {formatDateLabel(date)}
-                            </span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-          )}
         </div>
 
         {filteredFlights.length === 0 ? (
           <div className="text-center py-20 border-2 border-dashed border-border rounded-3xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="p-4 bg-muted rounded-full w-fit mx-auto mb-4">
-              <Filter className="h-10 w-10 text-muted-foreground/50" />
+            <div className={`p-4 rounded-full w-fit mx-auto mb-4 ${errorMessage ? 'bg-amber-500/10' : 'bg-muted'}`}>
+              {errorMessage ? (
+                <ShieldAlert className="h-10 w-10 text-amber-500" />
+              ) : (
+                <Filter className="h-10 w-10 text-muted-foreground/50" />
+              )}
             </div>
-            <h3 className="text-xl font-semibold mb-2">No History Found</h3>
-            <p className="text-muted-foreground">
-              We couldn't find any historical data for this flight number.
+            <h3 className="text-xl font-semibold mb-2">
+              {errorMessage ? 'Subscription Required' : 'No History Found'}
+            </h3>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              {errorMessage || "We couldn't find any historical data for this flight number."}
             </p>
           </div>
         ) : (
