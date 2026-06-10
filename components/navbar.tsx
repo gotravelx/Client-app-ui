@@ -1,6 +1,6 @@
 "use client"
 
-import { RefreshCw, LogOut, Wallet, ChevronDown, User, Wifi, WifiOff, Clock } from "lucide-react"
+import { RefreshCw, LogOut, Wallet, ChevronDown, User } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { CONTRACT_ADDRESS } from "@/lib/constants"
 import { Button } from "@/components/ui/button"
@@ -18,8 +18,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 interface NavbarProps {
-  isConnected?: boolean
-  lastUpdate?: Date | null
   onRefresh?: () => void
   refreshing?: boolean
   showRefresh?: boolean
@@ -27,8 +25,6 @@ interface NavbarProps {
 }
 
 export function Navbar({
-  isConnected = false,
-  lastUpdate,
   onRefresh,
   refreshing = false,
   showRefresh = false,
@@ -85,29 +81,7 @@ export function Navbar({
           </Link>
         </div>
 
-        {/* Connection Status */}
-        <div className="flex items-center gap-2 mr-4">
-          <span className="bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded-md self-end">Client-realtime-app</span>
 
-          {isConnected ? (
-            <>
-              <Wifi className="h-4 w-4 text-green-500" />
-              <span className="text-sm text-green-600 font-medium hidden sm:inline">Connected</span>
-            </>
-          ) : (
-            <>
-              <WifiOff className="h-4 w-4 text-red-500" />
-              <span className="text-sm text-red-600 font-medium hidden sm:inline">Disconnected</span>
-            </>
-          )}
-
-          {lastUpdate && (
-            <div className="items-center gap-1 text-[10px] md:text-sm text-muted-foreground hidden md:flex">
-              <Clock className="h-3 w-3" />
-              <span>Last: {formatTime(lastUpdate)}</span>
-            </div>
-          )}
-        </div>
 
         <div className="ml-auto flex items-center space-x-4">
           {/* Refresh Button */}
