@@ -1,6 +1,6 @@
 "use client"
 
-import { Plane, Wifi, WifiOff, Clock, RefreshCw, LogOut } from "lucide-react"
+import { RefreshCw, LogOut, Wallet, ChevronDown, User } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { CONTRACT_ADDRESS } from "@/lib/constants"
 import { Button } from "@/components/ui/button"
@@ -8,10 +8,16 @@ import Image from "next/image"
 import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
 import { useAuth } from "@/components/auth-provider"
+import Link from "next/link"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 interface NavbarProps {
-  isConnected?: boolean
-  lastUpdate?: Date | null
   onRefresh?: () => void
   refreshing?: boolean
   showRefresh?: boolean
@@ -19,8 +25,6 @@ interface NavbarProps {
 }
 
 export function Navbar({
-  isConnected = false,
-  lastUpdate,
   onRefresh,
   refreshing = false,
   showRefresh = false,
@@ -33,13 +37,15 @@ export function Navbar({
 
   useEffect(() => {
     setMounted(true)
-    if (window.location.hostname === 'localhost' || window.location.hostname === 'client.gotravelx.com') {
-      setExplorerBaseUrl("https://caminoscan.com/address/")
-    }
   }, [])
 
   const redirectOnApp = () => {
-    window.location.href = "https://gotravelx.com"
+    window.location.href = "https://dev.gotravelx.com"
+  }
+
+  const handleLogout = () => {
+    disconnectWallet()
+    window.location.href = "/"
   }
 
   const formatTime = (date: Date) => {
@@ -52,10 +58,11 @@ export function Navbar({
   }
 
   return (
-    <div className="border-b px-4 bg-background dark:bg-background-dark sticky top-0 z-50 backdrop-blur-sm dark:bg-gray-900/95">
+    <div className="border-b px-4 bg-background/95 sticky top-0 z-50 backdrop-blur-sm">
       <div className="flex h-20 items-center">
-        <div className="flex items-center gap-2 mr-4">
-          <div onClick={redirectOnApp} className="cursor-pointer flex items-center">
+        <div className="flex items-center gap-2 mr-4 ml-2 md:ml-8 lg:ml-12">
+          <Link href="/" className="cursor-pointer flex items-center">
+            <span className="sr-only">GoTravelX</span>
             {mounted ? (
               <Image
                 src={resolvedTheme === "dark" ? "/logo-dark.png" : "/logo-light.png"}
@@ -68,31 +75,7 @@ export function Navbar({
             ) : (
               <div className="h-18 w-[186px]" />
             )}
-          </div>
-        </div>
-
-        {/* Connection Status */}
-        <div className="flex items-center gap-2 mr-4">
-          <span className="bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded-md self-end">Client-realtime-app</span>
-
-          {isConnected ? (
-            <>
-              <Wifi className="h-4 w-4 text-green-500" />
-              <span className="text-sm text-green-600 font-medium hidden sm:inline">Connected</span>
-            </>
-          ) : (
-            <>
-              <WifiOff className="h-4 w-4 text-red-500" />
-              <span className="text-sm text-red-600 font-medium hidden sm:inline">Disconnected</span>
-            </>
-          )}
-
-          {lastUpdate && (
-            <div className="items-center gap-1 text-sm text-muted-foreground hidden md:flex">
-              <Clock className="h-3 w-3" />
-              <span>Last: {formatTime(lastUpdate)}</span>
-            </div>
-          )}
+          </Link>
         </div>
 
         <div className="ml-auto flex items-center space-x-4">
@@ -124,17 +107,52 @@ export function Navbar({
           </div>
 
           {isConnectedWallet && (
-            <div className="flex items-center gap-2">
-              <div className="px-3 py-1 bg-muted rounded-full text-xs font-mono hidden md:block">
-                {walletAddress ? `${walletAddress.substring(0, 6)}...${walletAddress.substring(walletAddress.length - 4)}` : ""}
+            <div className="flex items-center gap-3">
+              {/* Wallet Badge with Hover Tooltip */}
+              <div className="relative group">
+                <div className="flex items-center gap-2 bg-white text-black dark:bg-zinc-800 dark:text-white border px-3 py-1.5 rounded-lg font-mono text-sm font-semibold shadow-sm cursor-help">
+                  <Wallet className="h-4 w-4 text-primary shrink-0" />
+                  <span>
+                    {walletAddress ? `${walletAddress.substring(0, 6)}...${walletAddress.substring(walletAddress.length - 4)}` : ""}
+                  </span>
+                </div>
+                
+                {/* Custom Hover Tooltip */}
+                <div className="absolute right-0 top-full mt-2 hidden group-hover:block bg-zinc-900 text-white border border-zinc-700 rounded-lg p-2 px-3 shadow-xl font-mono text-xs z-50 w-max select-all animate-in fade-in slide-in-from-top-1 duration-150">
+                  {walletAddress}
+                </div>
               </div>
-              <Button variant="ghost" size="sm" onClick={disconnectWallet}>
-                <LogOut className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline">Disconnect</span>
-              </Button>
+
+              {/* Profile Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="flex items-center gap-1.5 h-9 px-3 rounded-full hover:bg-muted text-foreground"
+                  >
+                    <span className="text-sm font-medium">Profile</span>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-48" align="end">
+                  <DropdownMenuItem asChild className="cursor-pointer">
+                    <Link href="/profile" className="flex items-center w-full">
+                      <User className="mr-2 h-4 w-4" />
+                      <span>My Profile</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleLogout}
+                    className="cursor-pointer text-red-500 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/30 font-semibold"
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Logout</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           )}
-
 
           <ThemeToggle />
         </div>

@@ -448,35 +448,7 @@ describe("History Page - Extended Tests", () => {
     );
   });
 
-  it("handles blockchain events triggering refresh", async () => {
-    const events = [{ flightNumber: "UA3682", description: "Flight updated" }];
-    jest.mock("@/hooks/use-blockchain-connection", () => ({
-      useBlockchainConnection: jest.fn().mockReturnValue({
-        isConnected: true,
-        lastUpdate: new Date(),
-        events,
-      }),
-    }));
 
-    (fetchHistoricalFlightData as jest.Mock).mockResolvedValueOnce(
-      mockFlightData
-    );
-    (decryptFlightData as jest.Mock).mockResolvedValueOnce([
-      "UA",
-      "3682",
-      "UA",
-      "3683",
-    ]);
-
-    render(<HistoryPage />);
-    await waitFor(() =>
-      expect(
-        screen.getByText(/Historical Flight Data - UA3682/i)
-      ).toBeInTheDocument()
-    );
-
-    await waitFor(() => expect(fetchHistoricalFlightData).toHaveBeenCalled());
-  });
 
   it("handles flight with no marketedFlightSegments", async () => {
     (fetchHistoricalFlightData as jest.Mock).mockResolvedValueOnce({

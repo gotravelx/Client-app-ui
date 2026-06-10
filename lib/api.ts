@@ -59,7 +59,18 @@ export async function fetchHistoricalFlightData(
       },
     );
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      let errorMessage = `API error: ${response.status}`;
+      try {
+        const errJson = await response.json();
+        if (errJson && errJson.message) {
+          errorMessage = errJson.message;
+        } else if (errJson && errJson.error) {
+          errorMessage = errJson.error;
+        }
+      } catch (e) {}
+      const error = new Error(errorMessage) as any;
+      error.status = response.status;
+      throw error;
     }
     const data = await response.json();
     return data;
@@ -101,7 +112,18 @@ export async function searchFlightData(
       },
     );
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      let errorMessage = `API error: ${response.status}`;
+      try {
+        const errJson = await response.json();
+        if (errJson && errJson.message) {
+          errorMessage = errJson.message;
+        } else if (errJson && errJson.error) {
+          errorMessage = errJson.error;
+        }
+      } catch (e) {}
+      const error = new Error(errorMessage) as any;
+      error.status = response.status;
+      throw error;
     }
     const data = await response.json();
     return data;

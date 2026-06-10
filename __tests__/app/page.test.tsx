@@ -121,20 +121,17 @@ jest.mock("@/components/search-bar", () => ({
 
 jest.mock("@/components/navbar", () => ({
   Navbar: ({ 
-    isConnected, 
     onRefresh, 
     refreshing, 
     showRefresh, 
     lastRefresh 
   }: {
-    isConnected: boolean;
     onRefresh: () => void;
     refreshing: boolean;
     showRefresh: boolean;
     lastRefresh: Date | null;
   }) => (
     <div data-testid="navbar">
-      <div data-testid="connection-status">Connected: {isConnected.toString()}</div>
       {showRefresh && (
         <button
           data-testid="refresh-button"
@@ -287,30 +284,7 @@ describe("FlightTrackingDashboard", () => {
     });
   });
 
-  it("falls back to blockchain event date when today's data not found", async () => {
-    mockUseBlockchainConnection.mockReturnValue({
-      isConnected: true,
-      lastUpdate: new Date(),
-      events: mockEvents,
-    });
 
-    mockFetchHistoricalFlightData
-      .mockResolvedValueOnce({ flightDetails: [] })
-      .mockResolvedValueOnce(mockFlightData);
-
-    const user = userEvent.setup();
-    render(<FlightTrackingDashboard />);
-    
-    const input = screen.getByTestId("search-input");
-    
-    await user.type(input, "UA3682");
-    await user.keyboard("{Enter}");
-
-    await waitFor(() => {
-      expect(mockFetchHistoricalFlightData).toHaveBeenCalledTimes(2);
-      expect(screen.getByTestId("flight-card")).toBeInTheDocument();
-    });
-  });
 
   it("falls back to yesterday when today fails", async () => {
     mockFetchHistoricalFlightData
@@ -473,38 +447,9 @@ describe("FlightTrackingDashboard", () => {
     });
   });
 
-  it("handles blockchain connection state correctly", () => {
-    mockUseBlockchainConnection.mockReturnValue({
-      isConnected: false,
-      lastUpdate: new Date("2025-09-11T12:00:00Z"),
-      events: [],
-    });
-    
-    render(<FlightTrackingDashboard />);
-    
-    expect(screen.getByTestId("connection-status")).toHaveTextContent("Connected: false");
-  });
 
-  it("filters events correctly for flight card", async () => {
-    mockUseBlockchainConnection.mockReturnValue({
-      isConnected: true,
-      lastUpdate: new Date(),
-      events: mockEvents,
-    });
-    
-    const user = userEvent.setup();
-    render(<FlightTrackingDashboard />);
-    
-    const input = screen.getByTestId("search-input");
-    
-    await user.type(input, "UA3682");
-    await user.keyboard("{Enter}");
 
-    await waitFor(() => {
-      expect(screen.getByTestId("flight-card")).toBeInTheDocument();
-      expect(screen.getByTestId("filtered-events")).toHaveTextContent("1 events");
-    });
-  });
+
 
   it("handles 2-letter carrier codes", async () => {
     const user = userEvent.setup();

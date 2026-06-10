@@ -21,28 +21,7 @@ describe("Navbar Component", () => {
     expect(window.location.href).toBe("https://dev.gotravelx.com")
   })
 
-  it("shows connected status with Wifi icon", () => {
-    render(<Navbar isConnected={true} />)
-    expect(screen.getByText("Connected")).toBeInTheDocument()
-  })
 
-  it("shows disconnected status with WifiOff icon", () => {
-    render(<Navbar isConnected={false} />)
-    expect(screen.getByText("Disconnected")).toBeInTheDocument()
-  })
-
-  it("renders last update time correctly", () => {
-    const date = new Date("2025-09-12T10:05:30")
-    render(<Navbar lastUpdate={date} isConnected={true} />)
-
-    const formatted = date.toLocaleTimeString("en-US", {
-      hour12: true,
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    })
-    expect(screen.getByText(`Last: ${formatted}`)).toBeInTheDocument()
-  })
 
   it("renders refresh button and triggers onRefresh", () => {
     const onRefresh = jest.fn()
@@ -75,14 +54,15 @@ describe("Navbar Component", () => {
   it("renders contract link with shortened address", () => {
     render(<Navbar />)
     const link = screen.getByRole("link")
+    const addr = CONTRACT_ADDRESS || ""
     expect(link).toHaveAttribute(
       "href",
-      `https://columbus.caminoscan.com/address/${CONTRACT_ADDRESS}`
+      `https://columbus.caminoscan.com/address/${addr}`
     )
 
-    expect(link.textContent).toContain(CONTRACT_ADDRESS.substring(0, 6))
+    expect(link.textContent).toContain(addr.substring(0, 6))
     expect(link.textContent).toContain(
-      CONTRACT_ADDRESS.substring(CONTRACT_ADDRESS.length - 4)
+      addr.substring(addr.length - 4)
     )
   })
 })

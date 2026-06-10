@@ -4,11 +4,11 @@ import { useState, useEffect } from "react";
 import { FlightCard } from "@/components/flight-card";
 import { SearchBar } from "@/components/search-bar";
 import { Navbar } from "@/components/navbar";
-import { useBlockchainConnection } from "@/hooks/use-blockchain-connection";
 import { useAuth } from "@/components/auth-provider";
 import { decryptFlightData, fetchHistoricalFlightData, searchFlightData } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { AlertCircle, RefreshCw, ShieldCheck, Wallet, ArrowRight } from "lucide-react";
+import { AlertCircle, RefreshCw, Info } from "lucide-react";
+import { WalletSelectorModal } from "@/components/wallet-selector-modal";
 
 export default function FlightTrackingDashboard() {
   const router = useRouter();
@@ -20,34 +20,46 @@ export default function FlightTrackingDashboard() {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
   const [showPopup, setShowPopup] = useState(false);
+  const [popupTitle, setPopupTitle] = useState("Flight Data Unavailable");
+  const [popupDescription, setPopupDescription] = useState("We couldn't find any real-time or historical data for this flight number. Please verify the flight number and try again.");
 
-  const { isConnected, lastUpdate, events } = useBlockchainConnection();
-  const { isConnected: isWalletConnected, connect: connectWallet, isConnecting: isWalletConnecting, walletAddress } = useAuth();
-  const [showConnectModal, setShowConnectModal] = useState(false);
+     const { isConnected: isWalletConnected, connect: connectWallet, isConnecting: isWalletConnecting, walletAddress, error: walletError } = useAuth();
+     const [activeConnecting, setActiveConnecting] = useState<"metamask" | "coinbase" | "trust" | null>(null);
+     const [mounted, setMounted] = useState(false);
+     const [isModalDismissed, setIsModalDismissed] = useState(false);
 
-  useEffect(() => {
-    // Show connect modal immediately if not connected
-    if (!isWalletConnected) {
-      setShowConnectModal(true);
-    }
-  }, [isWalletConnected]);
+     useEffect(() => {
+       setMounted(true);
+     }, []);
 
-  const handleWalletConnect = async () => {
-    await connectWallet();
-  };
+     const handleWalletConnect = async (type: "metamask" | "coinbase" | "trust") => {
+       try {
+         setActiveConnecting(type);
+         await connectWallet(type);
+       } catch (err) {
+         console.error("Failed to connect wallet:", err);
+       } finally {
+         setActiveConnecting(null);
+       }
+     };
 
-  useEffect(() => {
-    if (isWalletConnected) {
-      setShowConnectModal(false);
-    } else {
-      // Clear sensitive/session data on disconnect
-      setFlightData(null);
-      setCurrentFlightNumber("");
-      setLastRefresh(null);
-    }
-  }, [isWalletConnected]);
+     useEffect(() => {
+       if (!isWalletConnected) {
+         // Clear sensitive/session data on disconnect
+         setFlightData(null);
+         setCurrentFlightNumber("");
+         setLastRefresh(null);
+       }
+     }, [isWalletConnected]);
 
   const handleSearch = async (flightNumber: string) => {
+    if (!isWalletConnected) {
+      setPopupTitle("Wallet Connection Required");
+      setPopupDescription("Please connect your wallet first to search and track real-time flight data.");
+      setShowPopup(true);
+      return;
+    }
+
     setLoading(true);
     setCurrentFlightNumber(flightNumber);
 
@@ -70,8 +82,6 @@ export default function FlightTrackingDashboard() {
       }
     };
 
-    await fetchFlights();
-
     const trySearch = async (dateStr: string): Promise<any | null> => {
       const result = await fetchHistoricalFlightData(
         flightNum,
@@ -86,6 +96,7 @@ export default function FlightTrackingDashboard() {
     };
 
     try {
+      await fetchFlights();
       const today = new Date();
       const startDate = new Date();
       startDate.setDate(today.getDate() - 3);
@@ -105,20 +116,7 @@ export default function FlightTrackingDashboard() {
 
       let data = result?.flightDetails?.length > 0 ? result : null;
 
-      if (!data && events.length > 0) {
-        const relatedEvent = events.find(
-          (e) =>
-            e.flightNumber === flightNumber ||
-            e.description?.includes(flightNumber)
-        );
 
-        if (relatedEvent?.timestamp) {
-          const eventDate = new Date(relatedEvent.timestamp)
-            .toISOString()
-            .split("T")[0];
-          data = await trySearch(eventDate);
-        }
-      }
 
       if (data && data.flightDetails?.length > 0) {
         // Sort to get the latest flight
@@ -177,10 +175,19 @@ export default function FlightTrackingDashboard() {
         setLastRefresh(new Date());
       } else {
         setFlightData(null);
+        setPopupTitle("Flight Data Unavailable");
+        setPopupDescription("We couldn't find any real-time or historical data for this flight number. Please verify the flight number and try again.");
         setShowPopup(true);
       }
-    } catch (error) {
+    } catch (error: any) {
       setFlightData(null);
+      if (error?.status === 403) {
+        setPopupTitle("Access Denied");
+        setPopupDescription("You are not subscribed to this flight. Please subscribe to access its real-time and historical data.");
+      } else {
+        setPopupTitle("Flight Data Unavailable");
+        setPopupDescription("We couldn't find any real-time or historical data for this flight number. Please verify the flight number and try again.");
+      }
       setShowPopup(true);
     } finally {
       setLoading(false);
@@ -216,21 +223,7 @@ export default function FlightTrackingDashboard() {
     return () => clearInterval(interval);
   }, [currentFlightNumber]);
 
-  useEffect(() => {
-    if (events.length > 0 && currentFlightNumber) {
-      const latestEvent = events[0];
-      if (
-        latestEvent.flightNumber === currentFlightNumber ||
-        latestEvent.description?.includes(currentFlightNumber)
-      ) {
-        const debounce = setTimeout(() => {
-          handleSearch(currentFlightNumber);
-        }, 1000);
 
-        return () => clearTimeout(debounce);
-      }
-    }
-  }, [events, currentFlightNumber]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -240,62 +233,40 @@ export default function FlightTrackingDashboard() {
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center backdrop-blur-sm">
           <div className="bg-card p-8 rounded-xl shadow-2xl text-center w-[340px] border border-border animate-in fade-in zoom-in duration-200">
             <div className="flex justify-center mb-4">
-              <div className="p-3 bg-destructive/10 rounded-full">
-                <AlertCircle className="h-8 w-8 text-destructive" />
+              <div className="p-3 bg-blue-500/10 dark:bg-blue-500/20 rounded-full">
+                <Info className="h-8 w-8 text-blue-500" />
               </div>
             </div>
-            <h2 className="text-xl font-bold mb-3 tracking-tight">Flight Data Unavailable</h2>
+            <h2 className="text-xl font-bold mb-3 tracking-tight">{popupTitle}</h2>
             <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-              We couldn't find any real-time or historical data for this flight number. Please verify the flight number and try again.
+              {popupDescription}
             </p>
             <div className="space-y-3">
               <button
-                onClick={() => setShowPopup(false)}
+                onClick={() => {
+                  setShowPopup(false);
+                  if (popupTitle === "Wallet Connection Required") {
+                    setIsModalDismissed(false);
+                  }
+                }}
                 className="w-full px-6 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-all active:scale-[0.98]"
               >
-                Got it
+                {popupTitle === "Wallet Connection Required" ? "Connect Wallet" : "Got it"}
               </button>
             </div>
           </div>
         </div>
       )}
-      {/* Simplified Auto-Connect Modal */}
-      {showConnectModal && !isWalletConnected && (
-        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
-          <div className="bg-card p-6 rounded-xl shadow-lg border border-border max-w-sm w-full animate-in fade-in zoom-in duration-200">
-            <h2 className="text-xl font-bold mb-2">Connect Wallet</h2>
-            <p className="text-sm text-muted-foreground mb-6">
-              Please connect your wallet to access flight subscriptions and history.
-            </p>
-
-            <div className="space-y-3">
-              <button
-                onClick={handleWalletConnect}
-                disabled={isWalletConnecting}
-                className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-all flex items-center justify-center gap-2"
-              >
-                {isWalletConnecting ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Connect Wallet"
-                )}
-              </button>
-
-              <button
-                onClick={() => setShowConnectModal(false)}
-                className="w-full px-4 py-2 bg-secondary text-secondary-foreground rounded-lg font-medium hover:bg-secondary/80 transition-all"
-              >
-                I'll do it later
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <WalletSelectorModal
+        open={!isWalletConnected && !isModalDismissed}
+        onClose={() => setIsModalDismissed(true)}
+        onWalletSelected={handleWalletConnect}
+        isConnecting={isWalletConnecting}
+        activeConnecting={activeConnecting}
+      />
 
 
       <Navbar
-        isConnected={isConnected}
-        lastUpdate={lastUpdate}
         onRefresh={handleRefresh}
         refreshing={refreshing}
         showRefresh={!!currentFlightNumber}
@@ -314,11 +285,7 @@ export default function FlightTrackingDashboard() {
           <div className="mt-8">
             <FlightCard
               flight={flightData}
-              events={events.filter(
-                (e) =>
-                  e.flightNumber === currentFlightNumber ||
-                  e.description?.includes(currentFlightNumber)
-              )}
+              events={[]}
             />
 
             <div className="mt-6 text-center">

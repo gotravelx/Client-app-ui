@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FlightCard } from "@/components/flight-card";
 import { Navbar } from "@/components/navbar";
-import { useBlockchainConnection } from "@/hooks/use-blockchain-connection";
 import { useAuth } from "@/components/auth-provider";
 import { decryptFlightData, fetchHistoricalFlightData, searchFlightData } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -30,7 +29,6 @@ export default function HistoryPage() {
   const [availableDates, setAvailableDates] = useState<string[]>([]);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const { walletAddress, isConnected: isWalletConnected } = useAuth();
-  const { isConnected, lastUpdate, events } = useBlockchainConnection();
 
   // Redirect to home if wallet is disconnected
   useEffect(() => {
@@ -237,30 +235,12 @@ export default function HistoryPage() {
     return () => clearInterval(interval);
   }, [flightNumber]);
 
-  // Refresh on blockchain events
-  useEffect(() => {
-    if (events.length > 0 && flightNumber) {
-      const latestEvent = events[0];
-      if (
-        latestEvent.flightNumber === flightNumber ||
-        latestEvent.description?.includes(flightNumber)
-      ) {
-        console.log("Blockchain event received, refreshing historical data...");
-        const debounce = setTimeout(() => {
-          fetchHistoricalData();
-        }, 1000);
 
-        return () => clearTimeout(debounce);
-      }
-    }
-  }, [events, flightNumber]);
 
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
         <Navbar
-          isConnected={isConnected}
-          lastUpdate={lastUpdate}
           onRefresh={handleRefresh}
           refreshing={refreshing}
           showRefresh={true}
@@ -281,8 +261,6 @@ export default function HistoryPage() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar
-        isConnected={isConnected}
-        lastUpdate={lastUpdate}
         onRefresh={handleRefresh}
         refreshing={refreshing}
         showRefresh={true}
@@ -401,11 +379,7 @@ export default function HistoryPage() {
 
                 <FlightCard
                   flight={flight}
-                  events={events.filter(
-                    (e) =>
-                      e.flightNumber === flightNumber ||
-                      e.description?.includes(flightNumber)
-                  )}
+                  events={[]}
                 />
               </div>
             ))}
