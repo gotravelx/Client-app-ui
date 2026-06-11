@@ -3,11 +3,12 @@
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Wallet, Copy, Check, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { Wallet, Copy, Check, Plus, RefreshCw, Trash2, ArrowLeft } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { Navbar } from "@/components/navbar"
 import { WalletSelectorModal } from "@/components/wallet-selector-modal"
 import { toast } from "sonner"
+import Link from "next/link"
 
 type WalletType = "metamask" | "coinbase" | "trust";
 
@@ -484,7 +485,17 @@ export default function ProfilePage() {
     <div className="w-full min-h-screen bg-zinc-50 dark:bg-[#060913] text-zinc-900 dark:text-white">
       <Navbar />
       
-      <div className="w-full max-w-4xl mx-auto px-4 py-16 space-y-8">
+      <div className="w-full max-w-4xl mx-auto px-4 py-16 space-y-6">
+        <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors group"
+          >
+            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+            <span>Back</span>
+          </Link>
+        </div>
+
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 dark:border-zinc-800 pb-6 gap-4">
           <div className="space-y-1">
             <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-zinc-50">

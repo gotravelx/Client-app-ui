@@ -114,7 +114,7 @@ export function Navbar({
             <div className="flex items-center gap-3">
               {/* Wallet Badge with Hover Tooltip */}
               <div className="relative group">
-                <div className="flex items-center gap-2 bg-white text-black dark:bg-zinc-800 dark:text-white border px-3 py-1.5 rounded-lg font-mono text-sm font-semibold shadow-sm cursor-help">
+                <div className="flex items-center gap-2 bg-white text-black dark:bg-zinc-800 dark:text-white border px-3 py-1.5 rounded-lg font-mono text-sm font-semibold shadow-sm cursor-pointer">
                   <Wallet className="h-4 w-4 text-primary shrink-0" />
                   <span>
                     {walletAddress ? `${walletAddress.substring(0, 6)}...${walletAddress.substring(walletAddress.length - 4)}` : ""}
