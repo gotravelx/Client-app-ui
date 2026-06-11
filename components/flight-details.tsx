@@ -9,7 +9,7 @@ interface FlightDetailsProps {
   flight: any
 }
 
-export function FlightDetails({ flight }: FlightDetailsProps) {
+export function FlightDetails({ flight }: Readonly<FlightDetailsProps>) {
   if (!flight) return null
 
   const getDelayInfo = (delayMinutes: string) => {
@@ -171,7 +171,7 @@ export function FlightDetails({ flight }: FlightDetailsProps) {
           <CardContent>
             <div className="space-y-2">
               {flight.marketedFlightSegments.map((segment: any, index: number) => (
-                <div key={index} className="flex justify-between items-center p-2 bg-muted rounded">
+                <div key={`${segment.marketingAirlineCode || ""}-${segment.flightNumber || index}`} className="flex justify-between items-center p-2 bg-muted rounded">
                   <span className="font-medium">{segment.marketingAirlineCode}</span>
                   <span>{segment.flightNumber}</span>
                 </div>

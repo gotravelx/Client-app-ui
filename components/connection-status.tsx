@@ -7,7 +7,7 @@ interface ConnectionStatusProps {
   lastUpdate: Date | null
 }
 
-export function ConnectionStatus({ isConnected, lastUpdate }: ConnectionStatusProps) {
+export function ConnectionStatus({ isConnected, lastUpdate }: Readonly<ConnectionStatusProps>) {
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString("en-US", {
       hour12: false,

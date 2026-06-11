@@ -6,7 +6,7 @@ interface FlightStatusBadgeProps {
   status: string
 }
 
-export function FlightStatusBadge({ status }: FlightStatusBadgeProps) {
+export function FlightStatusBadge({ status }: Readonly<FlightStatusBadgeProps>) {
   const getStatusInfo = (status: string) => {
     switch (status) {
       case "NDPT":

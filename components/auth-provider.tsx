@@ -7,7 +7,7 @@ type AuthContextType = ReturnType<typeof useAuthLogic>
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     const auth = useAuthLogic()
     return (
         <AuthContext.Provider value={auth}>

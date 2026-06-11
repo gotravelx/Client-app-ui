@@ -19,7 +19,7 @@ export function useBlockchainConnection() {
   }, [])
 
   const connectToBlockchain = () => {
-    if (typeof window === "undefined") return;
+    if (globalThis.window === undefined) return;
 
     try {
       const websocket = new WebSocket(WS_PROVIDER_URL)
@@ -49,7 +49,7 @@ export function useBlockchainConnection() {
       websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
-          if (data.params && data.params.result) {
+          if (data.params?.result) {
             const logData = data.params.result
 
             // Parse event data to extract flight information
@@ -74,7 +74,7 @@ export function useBlockchainConnection() {
             setLastUpdate(new Date())
           }
         } catch (error) {
-          // Silent catch for parsing errors
+          console.warn("Failed to parse blockchain event log:", error);
         }
       }
 
@@ -91,7 +91,7 @@ export function useBlockchainConnection() {
 
       wsRef.current = websocket
     } catch (error) {
-      // Silent catch for initialization errors
+      console.warn("Failed to initialize blockchain connection:", error);
     }
   }
 
@@ -106,11 +106,6 @@ export function useBlockchainConnection() {
     return eventTypes[topic] || "Flight Event"
   }
 
-  const extractFlightNumber = (data: string) => {
-    // Extract flight number from event data
-    // This would need to be implemented based on the actual event data structure
-    return "Unknown"
-  }
 
   const parseEventData = (data: string, topics: string[]) => {
     // Parse the event data based on the ABI structure

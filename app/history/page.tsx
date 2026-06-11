@@ -11,12 +11,86 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Filter, ShieldAlert } from "lucide-react";
 import moment from "moment-timezone";
 
+function parseFlightNumber(flightNumber: string) {
+  const match = /^([A-Z]{2,3})(\d+)$/.exec(flightNumber);
+  if (!match) {
+    throw new Error("Invalid flight number format");
+  }
+  return {
+    carrierCode: match[1].toUpperCase(),
+    flightNum: match[2],
+  };
+}
+
+async function fetchAirportCodes(flightNum: string, carrierCode: string) {
+  try {
+    const flightInfoResult = await searchFlightData(flightNum, carrierCode);
+    if (flightInfoResult?.flightInfo) {
+      return {
+        arrivalCode: flightInfoResult.flightInfo.arrivalAirport?.code || "",
+        departureCode: flightInfoResult.flightInfo.departureAirport?.code || "",
+      };
+    }
+  } catch (e) {
+    console.warn("Could not fetch flight info for airport codes", e);
+  }
+  return { arrivalCode: "", departureCode: "" };
+}
+
+function collectEncryptedStrings(allFlights: any[]) {
+  const allEncryptedStrings: string[] = [];
+  const updateTargets: { obj: any; key: string }[] = [];
+
+  for (const flight of allFlights) {
+    const segments = flight.marketedFlightSegments || [];
+    for (const segment of segments) {
+      if (segment.marketingAirlineCode) {
+        allEncryptedStrings.push(segment.marketingAirlineCode);
+        updateTargets.push({ obj: segment, key: "marketingAirlineCode" });
+      }
+      if (segment.flightNumber) {
+        allEncryptedStrings.push(segment.flightNumber);
+        updateTargets.push({ obj: segment, key: "flightNumber" });
+      }
+    }
+  }
+  return { allEncryptedStrings, updateTargets };
+}
+
+async function decryptFlightSegments(allFlights: any[]) {
+  const { allEncryptedStrings, updateTargets } = collectEncryptedStrings(allFlights);
+  if (allEncryptedStrings.length === 0) return;
+
+  try {
+    const decryptedData = await decryptFlightData(allEncryptedStrings);
+    const decryptedValues = decryptedData.decryptedData || [];
+    for (let i = 0; i < decryptedValues.length; i++) {
+      if (decryptedValues[i]) {
+        updateTargets[i].obj[updateTargets[i].key] = decryptedValues[i];
+      }
+    }
+  } catch (decryptError) {
+    console.error("Batch decryption failed", decryptError);
+  }
+}
+
+function getSortTime(f: any): number {
+  const d = f.scheduledDepartureDate ||
+    f.times?.scheduledDeparture ||
+    f.times?.estimatedDeparture ||
+    f.departureDate;
+  return d ? new Date(d).getTime() : 0;
+}
+
+function sortFlightsNewestFirst(flights: any[]): any[] {
+  return [...flights].sort((a, b) => getSortTime(b) - getSortTime(a));
+}
+
 export default function HistoryPage() {
   const searchParams = useSearchParams();
   const flightNumber = searchParams.get("flightNumber") || "";
   const router = useRouter();
 
-  const [flights, setFlights] = useState<any[]>([]);
   const [filteredFlights, setFilteredFlights] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -33,7 +107,6 @@ export default function HistoryPage() {
 
   const fetchHistoricalData = async () => {
     if (!flightNumber) {
-      setFlights([]);
       setFilteredFlights([]);
       setLoading(false);
       return;
@@ -41,29 +114,10 @@ export default function HistoryPage() {
 
     setErrorMessage(null);
     try {
-      let arrivalCode: string = "";
-      let departureCode: string = "";
-
-      const match = flightNumber.match(/^([A-Z]{2,3})(\d+)$/);
-      if (!match) {
-        throw new Error("Invalid flight number format");
-      }
-
-      const CarrierCode = match[1].toUpperCase();
-      const flightNum = match[2];
-
+      const { carrierCode: parsedCarrierCode, flightNum } = parseFlightNumber(flightNumber);
       setLoading(true);
 
-      // 1. Fetch flight info to get airport codes
-      try {
-        const flightInfoResult = await searchFlightData(flightNum, CarrierCode);
-        if (flightInfoResult?.flightInfo) {
-          arrivalCode = flightInfoResult.flightInfo.arrivalAirport?.code || "";
-          departureCode = flightInfoResult.flightInfo.departureAirport?.code || "";
-        }
-      } catch (e) {
-        console.warn("Could not fetch flight info for airport codes", e);
-      }
+      const { arrivalCode, departureCode } = await fetchAirportCodes(flightNum, parsedCarrierCode);
 
       const endDate = new Date().toISOString().split("T")[0];
       const startDate = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000)
@@ -71,7 +125,7 @@ export default function HistoryPage() {
         .split("T")[0];
 
       const carrierCode =
-        flightNumber.match(/^[A-Z]{2,3}/)?.[0] || flightNumber.substring(0, 2);
+        /^[A-Z]{2,3}/.exec(flightNumber)?.[0] || flightNumber.substring(0, 2);
 
       const data = await fetchHistoricalFlightData(
         flightNum,
@@ -83,60 +137,10 @@ export default function HistoryPage() {
         walletAddress || undefined
       );
 
-      if (data && data.flightDetails) {
-        const allFlights = data.flightDetails;
-
-        // 3. Optimized Batch Decryption (Collect ALL strings from ALL flights first)
-        const allEncryptedStrings: string[] = [];
-        const updateTargets: { obj: any, key: string }[] = [];
-
-        for (const flight of allFlights) {
-          if (flight.marketedFlightSegments) {
-            for (const segment of flight.marketedFlightSegments) {
-              if (segment.marketingAirlineCode) {
-                allEncryptedStrings.push(segment.marketingAirlineCode);
-                updateTargets.push({ obj: segment, key: "marketingAirlineCode" });
-              }
-              if (segment.flightNumber) {
-                allEncryptedStrings.push(segment.flightNumber);
-                updateTargets.push({ obj: segment, key: "flightNumber" });
-              }
-            }
-          }
-        }
-
-        // Single API call instead of loops
-        if (allEncryptedStrings.length > 0) {
-          try {
-            const decryptedData = await decryptFlightData(allEncryptedStrings);
-            const decryptedValues = decryptedData.decryptedData || [];
-            for (let i = 0; i < decryptedValues.length; i++) {
-              if (decryptedValues[i]) {
-                updateTargets[i].obj[updateTargets[i].key] = decryptedValues[i];
-              }
-            }
-          } catch (decryptError) {
-            console.error("Batch decryption failed", decryptError);
-          }
-        }
-
-        // Sortable time helper
-        const getSortTime = (f: any) => {
-          const d = f.scheduledDepartureDate ||
-            f.times?.scheduledDeparture ||
-            f.times?.estimatedDeparture ||
-            f.departureDate;
-          return d ? new Date(d).getTime() : 0;
-        };
-
-        // Sort newest first
-        const sortedFlights = allFlights.sort(
-          (a: any, b: any) => getSortTime(b) - getSortTime(a)
-        );
-
-        setFlights(sortedFlights);
+      if (data?.flightDetails) {
+        await decryptFlightSegments(data.flightDetails);
+        const sortedFlights = sortFlightsNewestFirst(data.flightDetails);
         setFilteredFlights(sortedFlights);
-
         setLastRefresh(new Date());
       }
     } catch (error: any) {
@@ -151,6 +155,7 @@ export default function HistoryPage() {
       setLoading(false);
     }
   };
+
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -299,7 +304,7 @@ export default function HistoryPage() {
             <div className="absolute left-0 md:left-4 top-0 bottom-0 w-px bg-border hidden md:block" />
 
             {filteredFlights.map((flight, index) => (
-              <div key={index} className="relative">
+              <div key={flight.blockchainHash || flight.scheduledDepartureDate || flight.departureDate} className="relative">
                 {/* Timeline Dot */}
                 <div className="absolute -left-12 top-0 mt-1 hidden md:flex items-center justify-center w-8 h-8">
                   <div className="h-2 w-2 rounded-full bg-primary" />

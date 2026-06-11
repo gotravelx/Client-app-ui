@@ -37,36 +37,72 @@ export const TrustIcon = (props: any) => (
 )
 
 const detectMetaMask = () => {
-  if (typeof window === "undefined") return false
-  const discovered = (window as any).__discoveredProviders
-  if (discovered && (discovered.has("io.metamask") || discovered.has("io.metamask.flask"))) return true
-  const ethereum = (window as any).ethereum
+  if (globalThis.window === undefined) return false
+  const discovered = (globalThis as any).__discoveredProviders
+  if (discovered?.has("io.metamask") || discovered?.has("io.metamask.flask")) return true
+  const ethereum = (globalThis as any).ethereum
   if (!ethereum) return false
-  const isActualMetaMask = (p: any) => p && p.isMetaMask && !p.isCoinbaseWallet && !p.isTrust && !p.isTrustWallet && !p.isBraveWallet && !p.isAvalanche
+  const isActualMetaMask = (p: any) => p?.isMetaMask && !p?.isCoinbaseWallet && !p?.isTrust && !p?.isTrustWallet && !p?.isBraveWallet && !p?.isAvalanche
   if (ethereum.providers?.length) return ethereum.providers.some(isActualMetaMask)
   return !!isActualMetaMask(ethereum) || !!ethereum.isMetaMask
 }
 
 const detectCoinbase = () => {
-  if (typeof window === "undefined") return false
-  const discovered = (window as any).__discoveredProviders
-  if (discovered && discovered.has("org.coinbase.wallet")) return true
-  if ((window as any).coinbaseWalletExtension) return true
-  const ethereum = (window as any).ethereum
+  if (globalThis.window === undefined) return false
+  const discovered = (globalThis as any).__discoveredProviders
+  if (discovered?.has("org.coinbase.wallet")) return true
+  if ((globalThis as any).coinbaseWalletExtension) return true
+  const ethereum = (globalThis as any).ethereum
   if (!ethereum) return false
   if (ethereum.providers?.length) return ethereum.providers.some((p: any) => p.isCoinbaseWallet)
   return !!ethereum.isCoinbaseWallet
 }
 
 const detectTrust = () => {
-  if (typeof window === "undefined") return false
-  const discovered = (window as any).__discoveredProviders
-  if (discovered && (discovered.has("app.trustwallet") || discovered.has("com.trustwallet.app"))) return true
-  if ((window as any).trustwallet) return true
-  const ethereum = (window as any).ethereum
+  if (globalThis.window === undefined) return false
+  const discovered = (globalThis as any).__discoveredProviders
+  if (discovered?.has("app.trustwallet") || discovered?.has("com.trustwallet.app")) return true
+  if ((globalThis as any).trustwallet) return true
+  const ethereum = (globalThis as any).ethereum
   if (!ethereum) return false
   if (ethereum.providers?.length) return ethereum.providers.some((p: any) => p.isTrust || p.isTrustWallet)
   return !!ethereum.isTrust || !!ethereum.isTrustWallet
+}
+
+interface WalletStatusProps {
+  walletKey: "metamask" | "coinbase" | "trust"
+  isDetected: boolean
+  isConnecting: boolean
+  activeConnecting: "metamask" | "coinbase" | "trust" | null
+  mounted: boolean
+}
+
+function WalletStatus({
+  walletKey,
+  isDetected,
+  isConnecting,
+  activeConnecting,
+  mounted,
+}: Readonly<WalletStatusProps>) {
+  if (isConnecting && activeConnecting === walletKey) {
+    return <RefreshCw className="h-4 w-4 animate-spin text-primary shrink-0" />
+  }
+
+  if (mounted && isDetected) {
+    return (
+      <div className="flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse" />
+        <span>Detected</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1 bg-zinc-100 dark:bg-white/[0.03] hover:bg-zinc-200 dark:hover:bg-white/[0.06] border border-zinc-200 dark:border-white/5 px-3 py-1 rounded-full text-[10px] text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 group-hover:dark:text-zinc-200 font-semibold transition-colors">
+      <span>Get</span>
+      <ArrowRight className="h-3 w-3" />
+    </div>
+  )
 }
 
 interface WalletSelectorModalProps {
@@ -83,17 +119,70 @@ export function WalletSelectorModal({
   onWalletSelected,
   isConnecting,
   activeConnecting,
-}: WalletSelectorModalProps) {
+}: Readonly<WalletSelectorModalProps>) {
   const [mounted, setMounted] = useState(false)
+  const [detected, setDetected] = useState({
+    metamask: false,
+    coinbase: false,
+    trust: false,
+  })
+
   useEffect(() => {
     setMounted(true)
+
+    const checkAll = () => {
+      setDetected({
+        metamask: detectMetaMask(),
+        coinbase: detectCoinbase(),
+        trust: detectTrust(),
+      })
+    }
+
+    // Check immediately on mount
+    checkAll()
+
+    if (globalThis.window !== undefined) {
+      // Listen for newly announced EIP-6963 providers
+      const handleAnnounce = () => {
+        setTimeout(checkAll, 50)
+      }
+      globalThis.addEventListener("eip6963:announceProvider", handleAnnounce)
+
+      // Request providers to announce
+      globalThis.dispatchEvent(new Event("eip6963:requestProvider"))
+
+      // Poll as a fallback to ensure we catch any delayed provider injections
+      const interval = setInterval(checkAll, 500)
+
+      return () => {
+        globalThis.removeEventListener("eip6963:announceProvider", handleAnnounce)
+        clearInterval(interval)
+      }
+    }
   }, [])
+
+  // Handle ESC key to close modal — best practice: global keydown via useEffect
+  useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose()
+    }
+    globalThis.addEventListener("keydown", handleKeyDown)
+    return () => globalThis.removeEventListener("keydown", handleKeyDown)
+  }, [open, onClose])
 
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/45 z-[100] flex items-center justify-center p-4 backdrop-blur-none animate-in fade-in duration-300">
-      <div className="relative max-w-[460px] w-full p-6 md:p-8 rounded-[28px] border border-zinc-200/80 dark:border-white/5 bg-white/95 dark:bg-[#0b0f19]/95 shadow-[0_24px_50px_rgba(0,0,0,0.15)] dark:shadow-[0_24px_50px_rgba(0,0,0,0.6)] text-zinc-900 dark:text-white overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+    // Backdrop: visual overlay only — close via X button or ESC key (handled in useEffect)
+    <div
+      className="fixed inset-0 bg-slate-950/45 dark:bg-black/45 z-[100] flex items-center justify-center p-4 backdrop-blur-none animate-in fade-in duration-300"
+    >
+      <dialog
+        aria-label="Connect Wallet"
+        open
+        className="m-0 relative max-w-[460px] w-full p-6 md:p-8 rounded-[28px] border border-zinc-200/80 dark:border-white/5 bg-white/95 dark:bg-[#0b0f19]/95 shadow-[0_24px_50px_rgba(0,0,0,0.15)] dark:shadow-[0_24px_50px_rgba(0,0,0,0.6)] text-zinc-900 dark:text-white overflow-hidden animate-in fade-in zoom-in-95 duration-300"
+      >
         <button
           onClick={onClose}
           className="absolute top-6 right-6 p-1.5 rounded-full hover:bg-zinc-100 dark:hover:bg-white/[0.06] text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors duration-200 z-20"
@@ -115,10 +204,10 @@ export function WalletSelectorModal({
           {/* MetaMask Option */}
           <button
             onClick={() => {
-              if (mounted && detectMetaMask()) {
+              if (mounted && detected.metamask) {
                 onWalletSelected("metamask")
-              } else {
-                window.open("https://metamask.io/download/", "_blank")
+              } else if (typeof globalThis !== "undefined") {
+                globalThis.open("https://metamask.io/download/", "_blank", "noopener,noreferrer")
               }
             }}
             disabled={isConnecting && activeConnecting !== "metamask"}
@@ -138,29 +227,23 @@ export function WalletSelectorModal({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {isConnecting && activeConnecting === "metamask" ? (
-                <RefreshCw className="h-4 w-4 animate-spin text-primary shrink-0" />
-              ) : mounted && detectMetaMask() ? (
-                <div className="flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse" />
-                  Detected
-                </div>
-              ) : (
-                <div className="flex items-center gap-1 bg-zinc-100 dark:bg-white/[0.03] hover:bg-zinc-200 dark:hover:bg-white/[0.06] border border-zinc-200 dark:border-white/5 px-3 py-1 rounded-full text-[10px] text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 group-hover:dark:text-zinc-200 font-semibold transition-colors">
-                  Get
-                  <ArrowRight className="h-3 w-3" />
-                </div>
-              )}
+              <WalletStatus
+                walletKey="metamask"
+                isDetected={detected.metamask}
+                isConnecting={isConnecting}
+                activeConnecting={activeConnecting}
+                mounted={mounted}
+              />
             </div>
           </button>
 
           {/* Coinbase Wallet Option */}
           <button
             onClick={() => {
-              if (mounted && detectCoinbase()) {
+              if (mounted && detected.coinbase) {
                 onWalletSelected("coinbase")
-              } else {
-                window.open("https://www.coinbase.com/wallet/downloads", "_blank")
+              } else if (typeof globalThis !== "undefined") {
+                globalThis.open("https://www.coinbase.com/wallet/downloads", "_blank", "noopener,noreferrer")
               }
             }}
             disabled={isConnecting && activeConnecting !== "coinbase"}
@@ -180,29 +263,23 @@ export function WalletSelectorModal({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {isConnecting && activeConnecting === "coinbase" ? (
-                <RefreshCw className="h-4 w-4 animate-spin text-primary shrink-0" />
-              ) : mounted && detectCoinbase() ? (
-                <div className="flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse" />
-                  Detected
-                </div>
-              ) : (
-                <div className="flex items-center gap-1 bg-zinc-100 dark:bg-white/[0.03] hover:bg-zinc-200 dark:hover:bg-white/[0.06] border border-zinc-200 dark:border-white/5 px-3 py-1 rounded-full text-[10px] text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 group-hover:dark:text-zinc-200 font-semibold transition-colors">
-                  Get
-                  <ArrowRight className="h-3 w-3" />
-                </div>
-              )}
+              <WalletStatus
+                walletKey="coinbase"
+                isDetected={detected.coinbase}
+                isConnecting={isConnecting}
+                activeConnecting={activeConnecting}
+                mounted={mounted}
+              />
             </div>
           </button>
 
           {/* Trust Wallet Option */}
           <button
             onClick={() => {
-              if (mounted && detectTrust()) {
+              if (mounted && detected.trust) {
                 onWalletSelected("trust")
-              } else {
-                window.open("https://trustwallet.com/download", "_blank")
+              } else if (typeof globalThis !== "undefined") {
+                globalThis.open("https://trustwallet.com/download", "_blank", "noopener,noreferrer")
               }
             }}
             disabled={isConnecting && activeConnecting !== "trust"}
@@ -222,23 +299,17 @@ export function WalletSelectorModal({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {isConnecting && activeConnecting === "trust" ? (
-                <RefreshCw className="h-4 w-4 animate-spin text-primary shrink-0" />
-              ) : mounted && detectTrust() ? (
-                <div className="flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse" />
-                  Detected
-                </div>
-              ) : (
-                <div className="flex items-center gap-1 bg-zinc-100 dark:bg-white/[0.03] hover:bg-zinc-200 dark:hover:bg-white/[0.06] border border-zinc-200 dark:border-white/5 px-3 py-1 rounded-full text-[10px] text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 group-hover:dark:text-zinc-200 font-semibold transition-colors">
-                  Get
-                  <ArrowRight className="h-3 w-3" />
-                </div>
-              )}
+              <WalletStatus
+                walletKey="trust"
+                isDetected={detected.trust}
+                isConnecting={isConnecting}
+                activeConnecting={activeConnecting}
+                mounted={mounted}
+              />
             </div>
           </button>
         </div>
-      </div>
+      </dialog>
     </div>
   )
 }

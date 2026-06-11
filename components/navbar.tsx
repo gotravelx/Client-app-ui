@@ -29,26 +29,25 @@ export function Navbar({
   refreshing = false,
   showRefresh = false,
   lastRefresh,
-}: NavbarProps) {
-  const { theme, resolvedTheme } = useTheme()
+}: Readonly<NavbarProps>) {
+  const { resolvedTheme } = useTheme()
   const { isConnected: isConnectedWallet, walletAddress, disconnect: disconnectWallet } = useAuth()
   const [mounted, setMounted] = useState(false)
   const [explorerBaseUrl, setExplorerBaseUrl] = useState("https://columbus.caminoscan.com/address/")
 
   useEffect(() => {
     setMounted(true)
-    if (window.location.hostname === 'localhost' || window.location.hostname === 'client.gotravelx.com') {
+    if (globalThis.window?.location?.hostname === 'localhost' || globalThis.window?.location?.hostname === 'client.gotravelx.com') {
       setExplorerBaseUrl("https://caminoscan.com/address/")
     }
   }, [])
 
-  const redirectOnApp = () => {
-    window.location.href = "https://dev.gotravelx.com"
-  }
 
   const handleLogout = () => {
     disconnectWallet()
-    window.location.href = "/"
+    if (globalThis.window) {
+      globalThis.window.location.href = "/"
+    }
   }
 
   const formatTime = (date: Date) => {
