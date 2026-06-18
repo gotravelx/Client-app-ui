@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth-provider"
 import { Navbar } from "@/components/navbar"
 import { WalletSelectorModal } from "@/components/wallet-selector-modal"
 import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 
 type WalletType = "metamask" | "coinbase" | "trust";
@@ -177,6 +178,8 @@ const requestAccountsForWallet = async (provider: any, walletType: string): Prom
 
 export default function ProfilePage() {
   const { walletAddress, walletType, isConnecting: isWalletConnecting, connect: connectWallet, disconnect: disconnectWallet } = useAuth()
+  const router = useRouter()
+  const [isMounted, setIsMounted] = useState(false)
   const [activeWallet, setActiveWallet] = useState<string | null>(null)
   const [connectedWallets, setConnectedWallets] = useState<SavedWallet[]>([])
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null)
@@ -184,6 +187,18 @@ export default function ProfilePage() {
   const [activeConnecting, setActiveConnecting] = useState<WalletType | null>(null)
   const [balances, setBalances] = useState<Record<string, string>>({})
   const isSwitchingRef = useRef(false)
+
+  // Track component mount status
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
+  // Route protection redirect
+  useEffect(() => {
+    if (isMounted && !walletAddress) {
+      router.push("/")
+    }
+  }, [isMounted, walletAddress, router])
 
   // Poll balances using standard JSON-RPC & Active Wallet Provider
   useEffect(() => {
@@ -346,8 +361,14 @@ export default function ProfilePage() {
     toast.success("Wallet unlinked.")
 
     if (activeWallet === addr) {
-      disconnectWallet()
-      setActiveWallet(null)
+      toast.info("Active wallet removed. Logging out...", {
+        duration: 1500,
+      })
+      setTimeout(() => {
+        disconnectWallet()
+        setActiveWallet(null)
+        router.push("/")
+      }, 1500)
     }
   }
 
@@ -479,6 +500,10 @@ export default function ProfilePage() {
         </div>
       </Card>
     )
+  }
+
+  if (!isMounted || !walletAddress) {
+    return null
   }
 
   return (
