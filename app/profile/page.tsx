@@ -3,118 +3,202 @@
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Wallet, Copy, Check, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { Wallet, Copy, Check, Plus, RefreshCw, Trash2, ArrowLeft } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { Navbar } from "@/components/navbar"
 import { WalletSelectorModal } from "@/components/wallet-selector-modal"
 import { toast } from "sonner"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
+
+type WalletType = "metamask" | "coinbase" | "trust";
 
 interface SavedWallet {
   address: string
-  type: "metamask" | "coinbase" | "trust"
+  type: WalletType
+}
+
+// Helper to detect window provider existence
+const getDiscoveredProvider = (type: string) => {
+  const discovered = (globalThis.window as any)?.__discoveredProviders
+  if (!discovered) return null
+
+  if (type === "metamask") {
+    return discovered.get("io.metamask") || discovered.get("io.metamask.flask") || null
+  }
+  if (type === "coinbase") {
+    return discovered.get("org.coinbase.wallet") || null
+  }
+  if (type === "trust") {
+    return discovered.get("app.trustwallet") || discovered.get("com.trustwallet.app") || null
+  }
+  return null
+}
+
+const getCoinbaseProvider = () => {
+  const win = globalThis.window as any
+  if (win.coinbaseWalletExtension) return win.coinbaseWalletExtension
+  const eth = win.ethereum
+  if (eth?.isCoinbaseWallet) return eth
+  if (eth?.providers?.length) {
+    return eth.providers.find((p: any) => p.isCoinbaseWallet) || null
+  }
+  return null
+}
+
+const getTrustProvider = () => {
+  const win = globalThis.window as any
+  if (win.trustwallet) return win.trustwallet
+  const eth = win.ethereum
+  if (eth?.isTrust || eth?.isTrustWallet) return eth
+  if (eth?.providers?.length) {
+    return eth.providers.find((p: any) => p.isTrust || p.isTrustWallet) || null
+  }
+  return null
+}
+
+const getMetaMaskProvider = () => {
+  const win = globalThis.window as any
+  const eth = win.ethereum
+  if (!eth) return null
+  const isActualMetaMask = (p: any) => p?.isMetaMask && !p.isCoinbaseWallet && !p.isTrust && !p.isTrustWallet && !p.isBraveWallet && !p.isAvalanche
+  if (eth.providers?.length) {
+    return eth.providers.find(isActualMetaMask) || null
+  }
+  return isActualMetaMask(eth) ? eth : null
+}
+
+// Helper to detect window provider existence
+const getProviderForType = (type: string) => {
+  if (globalThis.window === undefined) return null
+
+  // First check discovered EIP-6963 providers
+  const discovered = getDiscoveredProvider(type)
+  if (discovered) return discovered
+
+  // Fallback to legacy injection detection
+  if (type === "coinbase") return getCoinbaseProvider()
+  if (type === "trust") return getTrustProvider()
+  if (type === "metamask") return getMetaMaskProvider()
+
+  return null
+}
+
+
+const fetchRpcBalance = async (rpcUrl: string, address: string): Promise<string | null> => {
+  try {
+    const response = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "eth_getBalance",
+        params: [address, "latest"],
+        id: 1,
+      }),
+    })
+    const result = await response.json()
+    if (result.result && result.result !== "0x0" && BigInt(result.result) > BigInt(0)) {
+      return result.result
+    }
+  } catch (err) {
+    console.warn(`RPC query failed for ${rpcUrl}:`, err)
+  }
+  return null
+}
+
+const fetchProviderBalance = async (type: string, address: string): Promise<string | null> => {
+  const provider = getProviderForType(type)
+  if (!provider) return null
+  try {
+    const balanceHex = await provider.request({
+      method: "eth_getBalance",
+      params: [address, "latest"],
+    })
+    return balanceHex
+  } catch (err) {
+    console.warn(`Failed fetching from provider for ${type}:`, err)
+    return null
+  }
+}
+
+const getSingleWalletBalance = async (walletAddress: string, type: string): Promise<string> => {
+  const symbol = "CAM"
+  
+  let balanceHex = await fetchProviderBalance(type, walletAddress)
+
+  if (!balanceHex || balanceHex === "0x0" || BigInt(balanceHex) === BigInt(0)) {
+    balanceHex = await fetchRpcBalance("https://api.camino.network/ext/bc/C/rpc", walletAddress)
+  }
+
+  if (!balanceHex || balanceHex === "0x0" || BigInt(balanceHex) === BigInt(0)) {
+    try {
+      const response = await fetch("https://columbus.camino.network/ext/bc/C/rpc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "eth_getBalance",
+          params: [walletAddress, "latest"],
+          id: 1,
+        }),
+      })
+      const result = await response.json()
+      if (result.result) {
+        balanceHex = result.result
+      }
+    } catch (testnetErr) {
+      console.warn("Testnet RPC query failed:", testnetErr)
+    }
+  }
+
+  if (balanceHex) {
+    const wei = BigInt(balanceHex)
+    const eth = Number(wei) / 1e18
+    return `${eth.toFixed(3)} ${symbol}`
+  }
+  return `0.000 ${symbol}`
+}
+
+const requestAccountsForWallet = async (provider: any, walletType: string): Promise<void> => {
+  if (walletType === "metamask") {
+    try {
+      await provider.request({
+        method: "wallet_requestPermissions",
+        params: [{ eth_accounts: {} }],
+      })
+    } catch (err: any) {
+      if (err?.code === 4001) throw err
+      await provider.request({ method: "eth_requestAccounts" })
+    }
+  } else {
+    await provider.request({ method: "eth_requestAccounts" })
+  }
 }
 
 export default function ProfilePage() {
   const { walletAddress, walletType, isConnecting: isWalletConnecting, connect: connectWallet, disconnect: disconnectWallet } = useAuth()
+  const router = useRouter()
+  const [isMounted, setIsMounted] = useState(false)
   const [activeWallet, setActiveWallet] = useState<string | null>(null)
   const [connectedWallets, setConnectedWallets] = useState<SavedWallet[]>([])
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null)
   const [showWalletModal, setShowWalletModal] = useState(false)
-  const [activeConnecting, setActiveConnecting] = useState<"metamask" | "coinbase" | "trust" | null>(null)
+  const [activeConnecting, setActiveConnecting] = useState<WalletType | null>(null)
   const [balances, setBalances] = useState<Record<string, string>>({})
   const isSwitchingRef = useRef(false)
-  const [mounted, setMounted] = useState(false)
 
-  const [installedWallets, setInstalledWallets] = useState<{
-    metamask: boolean
-    coinbase: boolean
-    trust: boolean
-  }>({
-    metamask: false,
-    coinbase: false,
-    trust: false,
-  })
-
-  // Helper to detect window provider existence
-  const getProviderForType = (type: string) => {
-    if (typeof window === "undefined") return null
-
-    const discovered = (window as any).__discoveredProviders
-    if (discovered) {
-      if (type === "metamask") {
-        const mm = discovered.get("io.metamask") || discovered.get("io.metamask.flask")
-        if (mm) return mm
-      }
-      if (type === "coinbase") {
-        const cb = discovered.get("org.coinbase.wallet")
-        if (cb) return cb
-      }
-      if (type === "trust") {
-        const tw = discovered.get("app.trustwallet") || discovered.get("com.trustwallet.app")
-        if (tw) return tw
-      }
-    }
-
-    if (type === "coinbase") {
-      if ((window as any).coinbaseWalletExtension) return (window as any).coinbaseWalletExtension
-      const eth = (window as any).ethereum
-      if (eth?.isCoinbaseWallet) return eth
-      if (eth?.providers?.length) {
-        return eth.providers.find((p: any) => p.isCoinbaseWallet)
-      }
-      return null
-    }
-
-    if (type === "trust") {
-      if ((window as any).trustwallet) return (window as any).trustwallet
-      const eth = (window as any).ethereum
-      if (eth?.isTrust || eth?.isTrustWallet) return eth
-      if (eth?.providers?.length) {
-        return eth.providers.find((p: any) => p.isTrust || p.isTrustWallet)
-      }
-      return null
-    }
-
-    if (type === "metamask") {
-      const eth = (window as any).ethereum
-      if (!eth) return null
-      const isActualMetaMask = (p: any) => p && p.isMetaMask && !p.isCoinbaseWallet && !p.isTrust && !p.isTrustWallet && !p.isBraveWallet && !p.isAvalanche
-      if (eth.providers?.length) return eth.providers.find(isActualMetaMask)
-      if (isActualMetaMask(eth)) return eth
-    }
-
-    return null
-  }
-
-  // Detect which wallet extensions are active in the browser
+  // Track component mount status
   useEffect(() => {
-    setMounted(true)
-    const checkInstalled = () => {
-      setInstalledWallets({
-        metamask: getProviderForType("metamask") !== null,
-        coinbase: getProviderForType("coinbase") !== null,
-        trust: getProviderForType("trust") !== null,
-      })
-    }
-
-    checkInstalled()
-    const timer = setTimeout(checkInstalled, 1000)
-
-    const handleAnnounce = () => {
-      checkInstalled()
-    }
-    if (typeof window !== "undefined") {
-      window.addEventListener("eip6963:announceProvider", handleAnnounce)
-      window.dispatchEvent(new Event("eip6963:requestProvider"))
-    }
-
-    return () => {
-      clearTimeout(timer)
-      if (typeof window !== "undefined") {
-        window.removeEventListener("eip6963:announceProvider", handleAnnounce)
-      }
-    }
+    setIsMounted(true)
   }, [])
+
+  // Route protection redirect
+  useEffect(() => {
+    if (isMounted && !walletAddress) {
+      router.push("/")
+    }
+  }, [isMounted, walletAddress, router])
 
   // Poll balances using standard JSON-RPC & Active Wallet Provider
   useEffect(() => {
@@ -123,95 +207,15 @@ export default function ProfilePage() {
     let isMounted = true
     const fetchBalances = async () => {
       try {
-        // Detect chain ID from window provider if available
-        let defaultRpc = "https://columbus.camino.network/ext/bc/C/rpc"
-        let symbol = "CAM"
-        
-        if (typeof window !== "undefined") {
-          const mainProvider = (window as any).ethereum
-          if (mainProvider) {
-            try {
-              const chainId = await mainProvider.request({ method: "eth_chainId" })
-              if (chainId === "0x1f4" || chainId === "0x1F4" || parseInt(chainId, 16) === 500) {
-                defaultRpc = "https://api.camino.network/ext/bc/C/rpc"
-              }
-            } catch (e) {}
-          }
-        }
-
         const newBalances: Record<string, string> = {}
         await Promise.all(
           connectedWallets.map(async (w) => {
             try {
-              let balanceHex = null
-              
-              // 1. Try to query directly from the wallet's provider if installed/active
-              const provider = getProviderForType(w.type)
-              if (provider) {
-                try {
-                  balanceHex = await provider.request({
-                    method: "eth_getBalance",
-                    params: [w.address, "latest"],
-                  })
-                } catch (providerErr) {
-                  console.warn(`Failed fetching from provider for ${w.type}:`, providerErr)
-                }
-              }
-
-              // 2. If provider check returned zero or failed, query Camino Mainnet RPC
-              if (!balanceHex || balanceHex === "0x0" || BigInt(balanceHex) === BigInt(0)) {
-                try {
-                  const response = await fetch("https://api.camino.network/ext/bc/C/rpc", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      jsonrpc: "2.0",
-                      method: "eth_getBalance",
-                      params: [w.address, "latest"],
-                      id: 1,
-                    }),
-                  })
-                  const result = await response.json()
-                  if (result.result && result.result !== "0x0" && BigInt(result.result) > BigInt(0)) {
-                    balanceHex = result.result
-                  }
-                } catch (mainnetErr) {
-                  console.warn("Mainnet RPC query failed:", mainnetErr)
-                }
-              }
-
-              // 3. Fallback to Camino Columbus Testnet RPC
-              if (!balanceHex || balanceHex === "0x0" || BigInt(balanceHex) === BigInt(0)) {
-                try {
-                  const response = await fetch("https://columbus.camino.network/ext/bc/C/rpc", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      jsonrpc: "2.0",
-                      method: "eth_getBalance",
-                      params: [w.address, "latest"],
-                      id: 1,
-                    }),
-                  })
-                  const result = await response.json()
-                  if (result.result) {
-                    balanceHex = result.result
-                  }
-                } catch (testnetErr) {
-                  console.warn("Testnet RPC query failed:", testnetErr)
-                }
-              }
-
-              if (balanceHex) {
-                const wei = BigInt(balanceHex)
-                const eth = Number(wei) / 1e18
-                newBalances[w.address.toLowerCase()] = `${eth.toFixed(3)} ${symbol}`
-              } else {
-                newBalances[w.address.toLowerCase()] = `0.000 ${symbol}`
-              }
+              const formattedBalance = await getSingleWalletBalance(w.address, w.type)
+              newBalances[w.address.toLowerCase()] = formattedBalance
             } catch (err) {
               console.error(`Error fetching balance for ${w.address}:`, err)
-              newBalances[w.address.toLowerCase()] = `0.000 ${symbol}`
+              newBalances[w.address.toLowerCase()] = "0.000 CAM"
             }
           })
         )
@@ -266,7 +270,7 @@ export default function ProfilePage() {
     }
   }, [walletAddress, walletType])
 
-  const addWalletToSavedList = (address: string, type: "metamask" | "coinbase" | "trust") => {
+  const addWalletToSavedList = (address: string, type: WalletType) => {
     const addr = address.toLowerCase()
     setConnectedWallets((prev) => {
       const existing = prev.find((w) => w.address.toLowerCase() === addr)
@@ -285,7 +289,7 @@ export default function ProfilePage() {
     })
   }
 
-  const handleWalletSelected = async (type: "metamask" | "coinbase" | "trust") => {
+  const handleWalletSelected = async (type: WalletType) => {
     try {
       setActiveConnecting(type)
       await connectWallet(type)
@@ -310,7 +314,13 @@ export default function ProfilePage() {
     if (isSwitchingRef.current) return
     const provider = getProviderForType(wallet.type)
     if (!provider) {
-      toast.error(`Please install ${wallet.type === "metamask" ? "MetaMask" : wallet.type === "coinbase" ? "Coinbase Wallet" : "Trust Wallet"} to connect.`)
+      const walletNames: Record<string, string> = {
+        metamask: "MetaMask",
+        coinbase: "Coinbase Wallet",
+        trust: "Trust Wallet",
+      }
+      const walletName = walletNames[wallet.type] || "Wallet"
+      toast.error(`Please install ${walletName} to connect.`)
       return
     }
 
@@ -320,19 +330,7 @@ export default function ProfilePage() {
       let activeAccount = accounts[0]?.toLowerCase()
 
       if (!activeAccount || activeAccount !== wallet.address.toLowerCase()) {
-        if (wallet.type === "metamask") {
-          try {
-            await provider.request({
-              method: "wallet_requestPermissions",
-              params: [{ eth_accounts: {} }],
-            })
-          } catch (err: any) {
-            if (err?.code === 4001) throw err
-            await provider.request({ method: "eth_requestAccounts" })
-          }
-        } else {
-          await provider.request({ method: "eth_requestAccounts" })
-        }
+        await requestAccountsForWallet(provider, wallet.type)
         const freshAccounts = await provider.request({ method: "eth_accounts" })
         activeAccount = freshAccounts[0]?.toLowerCase()
       }
@@ -341,7 +339,7 @@ export default function ProfilePage() {
         localStorage.setItem("walletAddress", activeAccount)
         localStorage.setItem("walletType", wallet.type)
         // Update local context manually to sync
-        window.location.reload()
+        globalThis.window.location.reload()
       } else {
         toast.error("Failed to switch wallet", {
           description: `Please select account ${wallet.address.substring(0, 8)}... inside your wallet app/extension.`,
@@ -363,8 +361,14 @@ export default function ProfilePage() {
     toast.success("Wallet unlinked.")
 
     if (activeWallet === addr) {
-      disconnectWallet()
-      setActiveWallet(null)
+      toast.info("Active wallet removed. Logging out...", {
+        duration: 1500,
+      })
+      setTimeout(() => {
+        disconnectWallet()
+        setActiveWallet(null)
+        router.push("/")
+      }, 1500)
     }
   }
 
@@ -455,12 +459,12 @@ export default function ProfilePage() {
                 {isActive ? (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Active Session
+                    <span>Active Session</span>
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-zinc-800/80 border border-slate-200/60 dark:border-zinc-700/60 text-slate-500 dark:text-slate-400">
                     <span className="h-1.5 w-1.5 rounded-full bg-slate-400 dark:bg-zinc-600" />
-                    Linked Account
+                    <span>Linked Account</span>
                   </span>
                 )}
               </div>
@@ -468,7 +472,11 @@ export default function ProfilePage() {
           </div>
 
           <div className="flex items-center gap-3 shrink-0 self-end md:self-auto justify-end w-full md:w-auto border-t md:border-t-0 pt-3 md:pt-0 border-slate-50 dark:border-zinc-800/40">
-            {!isActive ? (
+            {isActive ? (
+              <div className="h-9 px-3 inline-flex items-center text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg border border-emerald-100 dark:border-emerald-900/30">
+                Active Session
+              </div>
+            ) : (
               <Button
                 size="sm"
                 variant="outline"
@@ -478,10 +486,6 @@ export default function ProfilePage() {
                 <RefreshCw className="h-3.5 w-3.5" />
                 Switch Wallet
               </Button>
-            ) : (
-              <div className="h-9 px-3 inline-flex items-center text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg border border-emerald-100 dark:border-emerald-900/30">
-                Active Session
-              </div>
             )}
             <Button
               size="icon"
@@ -498,11 +502,25 @@ export default function ProfilePage() {
     )
   }
 
+  if (!isMounted || !walletAddress) {
+    return null
+  }
+
   return (
     <div className="w-full min-h-screen bg-zinc-50 dark:bg-[#060913] text-zinc-900 dark:text-white">
       <Navbar />
       
-      <div className="w-full max-w-4xl mx-auto px-4 py-16 space-y-8">
+      <div className="w-full max-w-4xl mx-auto px-4 py-16 space-y-6">
+        <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors group"
+          >
+            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+            <span>Back</span>
+          </Link>
+        </div>
+
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 dark:border-zinc-800 pb-6 gap-4">
           <div className="space-y-1">
             <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-zinc-50">

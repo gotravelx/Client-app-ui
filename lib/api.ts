@@ -45,58 +45,52 @@ export async function fetchHistoricalFlightData(
   departureCode: string,
   walletAddress?: string
 ) {
-  try {
-    let url = `${baseUrl}/v1/flights/fetch-historical/${flightNumber}/date-range?fromDate=${fromDate}&toDate=${toDate}&carrierCode=${carrierCode}&departureAirport=${departureCode}&arrivalAirport=${arrivalCode}`;
+  let url = `${baseUrl}/v1/flights/fetch-historical/${flightNumber}/date-range?fromDate=${fromDate}&toDate=${toDate}&carrierCode=${carrierCode}&departureAirport=${departureCode}&arrivalAirport=${arrivalCode}`;
 
-    if (walletAddress) {
-      url += `&walletAddress=${walletAddress}`;
-    }
+  if (walletAddress) {
+    url += `&walletAddress=${walletAddress}`;
+  }
 
-    const response = await fetchWithRetry(
-      url,
-      {
-        method: "GET",
-      },
-    );
-    if (!response.ok) {
-      let errorMessage = `API error: ${response.status}`;
-      try {
-        const errJson = await response.json();
-        if (errJson && errJson.message) {
-          errorMessage = errJson.message;
-        } else if (errJson && errJson.error) {
-          errorMessage = errJson.error;
-        }
-      } catch (e) {}
-      const error = new Error(errorMessage) as any;
-      error.status = response.status;
-      throw error;
+  const response = await fetchWithRetry(
+    url,
+    {
+      method: "GET",
+    },
+  );
+  if (!response.ok) {
+    let errorMessage = `API error: ${response.status}`;
+    try {
+      const errJson = await response.json();
+      if (errJson?.message) {
+        errorMessage = errJson.message;
+      } else if (errJson?.error) {
+        errorMessage = errJson.error;
+      }
+    } catch (error) {
+      console.warn("Failed to parse error response JSON:", error);
     }
-    const data = await response.json();
-    return data;
-  } catch (error) {
+    const error = new Error(errorMessage) as any;
+    error.status = response.status;
     throw error;
   }
+  const data = await response.json();
+  return data;
 }
 
 export async function decryptFlightData(encryptedData: string[]) {
-  try {
-    const response = await fetchWithRetry(
-      `${baseUrl}/v1/flights/decrypt-flight-data`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          encryptedData,
-        }),
-      }
-    );
-    if (!response.ok) {
-      throw new Error(`Decryption API error: ${response.status}`);
+  const response = await fetchWithRetry(
+    `${baseUrl}/v1/flights/decrypt-flight-data`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        encryptedData,
+      }),
     }
-    return await response.json();
-  } catch (error) {
-    throw error;
+  );
+  if (!response.ok) {
+    throw new Error(`Decryption API error: ${response.status}`);
   }
+  return await response.json();
 }
 
 export async function searchFlightData(
@@ -104,30 +98,28 @@ export async function searchFlightData(
   carrierCode: string
 ) {
 
-  try {
-    const response = await fetchWithRetry(
-      `${baseUrl}/v1/flights/get-flight-status/${flightNumber}?carrier=${carrierCode}`,
-      {
-        method: "GET",
-      },
-    );
-    if (!response.ok) {
-      let errorMessage = `API error: ${response.status}`;
-      try {
-        const errJson = await response.json();
-        if (errJson && errJson.message) {
-          errorMessage = errJson.message;
-        } else if (errJson && errJson.error) {
-          errorMessage = errJson.error;
-        }
-      } catch (e) {}
-      const error = new Error(errorMessage) as any;
-      error.status = response.status;
-      throw error;
+  const response = await fetchWithRetry(
+    `${baseUrl}/v1/flights/get-flight-status/${flightNumber}?carrier=${carrierCode}`,
+    {
+      method: "GET",
+    },
+  );
+  if (!response.ok) {
+    let errorMessage = `API error: ${response.status}`;
+    try {
+      const errJson = await response.json();
+      if (errJson?.message) {
+        errorMessage = errJson.message;
+      } else if (errJson?.error) {
+        errorMessage = errJson.error;
+      }
+    } catch (error) {
+      console.warn("Failed to parse error response JSON:", error);
     }
-    const data = await response.json();
-    return data;
-  } catch (error) {
+    const error = new Error(errorMessage) as any;
+    error.status = response.status;
     throw error;
   }
+  const data = await response.json();
+  return data;
 }

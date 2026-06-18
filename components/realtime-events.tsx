@@ -13,12 +13,12 @@ interface RealtimeEventsProps {
   onEventsUpdate: (events: any[]) => void
 }
 
-export function RealtimeEvents({ events, onEventsUpdate }: RealtimeEventsProps) {
+export function RealtimeEvents({ events, onEventsUpdate }: Readonly<RealtimeEventsProps>) {
   const [isConnected, setIsConnected] = useState(false)
   const [ws, setWs] = useState<WebSocket | null>(null)
 
   const connectToBlockchain = () => {
-    if (typeof window === "undefined") return;
+    if (globalThis.window === undefined) return;
 
     try {
       const websocket = new WebSocket(WS_PROVIDER_URL)
@@ -48,7 +48,7 @@ export function RealtimeEvents({ events, onEventsUpdate }: RealtimeEventsProps) 
       websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
-          if (data.params && data.params.result) {
+          if (data.params?.result) {
             const logData = data.params.result
             const newEvent = {
               id: Date.now(),
@@ -63,7 +63,7 @@ export function RealtimeEvents({ events, onEventsUpdate }: RealtimeEventsProps) 
             onEventsUpdate([newEvent, ...events.slice(0, 49)]) // Keep last 50 events
           }
         } catch (error) {
-          // Silent parsing error
+          console.error("Error parsing websocket message:", error)
         }
       }
 
@@ -78,7 +78,7 @@ export function RealtimeEvents({ events, onEventsUpdate }: RealtimeEventsProps) 
 
       setWs(websocket)
     } catch (error) {
-      // Silent initialization error
+      console.error("Error connecting to blockchain:", error)
     }
   }
 

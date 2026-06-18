@@ -29,26 +29,25 @@ export function Navbar({
   refreshing = false,
   showRefresh = false,
   lastRefresh,
-}: NavbarProps) {
-  const { theme, resolvedTheme } = useTheme()
+}: Readonly<NavbarProps>) {
+  const { resolvedTheme } = useTheme()
   const { isConnected: isConnectedWallet, walletAddress, disconnect: disconnectWallet } = useAuth()
   const [mounted, setMounted] = useState(false)
   const [explorerBaseUrl, setExplorerBaseUrl] = useState("https://columbus.caminoscan.com/address/")
 
   useEffect(() => {
     setMounted(true)
-    if (window.location.hostname === 'localhost' || window.location.hostname === 'client.gotravelx.com') {
+    if (globalThis.window?.location?.hostname === 'localhost' || globalThis.window?.location?.hostname === 'client.gotravelx.com') {
       setExplorerBaseUrl("https://caminoscan.com/address/")
     }
   }, [])
 
-  const redirectOnApp = () => {
-    window.location.href = "https://dev.gotravelx.com"
-  }
 
   const handleLogout = () => {
     disconnectWallet()
-    window.location.href = "/"
+    if (globalThis.window) {
+      globalThis.window.location.href = "/"
+    }
   }
 
   const formatTime = (date: Date) => {
@@ -115,7 +114,7 @@ export function Navbar({
             <div className="flex items-center gap-3">
               {/* Wallet Badge with Hover Tooltip */}
               <div className="relative group">
-                <div className="flex items-center gap-2 bg-white text-black dark:bg-zinc-800 dark:text-white border px-3 py-1.5 rounded-lg font-mono text-sm font-semibold shadow-sm cursor-help">
+                <div className="flex items-center gap-2 bg-white text-black dark:bg-zinc-800 dark:text-white border px-3 py-1.5 rounded-lg font-mono text-sm font-semibold shadow-sm cursor-pointer">
                   <Wallet className="h-4 w-4 text-primary shrink-0" />
                   <span>
                     {walletAddress ? `${walletAddress.substring(0, 6)}...${walletAddress.substring(walletAddress.length - 4)}` : ""}

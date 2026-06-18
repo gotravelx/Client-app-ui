@@ -59,7 +59,7 @@ jest.mock("next-themes", () => ({
 process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.test.com"
 
 // Mock WebSocket
-global.WebSocket = jest.fn(() => ({
+globalThis.WebSocket = jest.fn(() => ({
   send: jest.fn(),
   close: jest.fn(),
   addEventListener: jest.fn(),
@@ -71,10 +71,10 @@ global.WebSocket = jest.fn(() => ({
 }))
 
 // Mock fetch
-global.fetch = jest.fn()
+globalThis.fetch = jest.fn()
 
 // Mock window.matchMedia
-Object.defineProperty(window, "matchMedia", {
+Object.defineProperty(globalThis, "matchMedia", {
   writable: true,
   value: jest.fn().mockImplementation((query) => ({
     matches: false,
@@ -89,22 +89,22 @@ Object.defineProperty(window, "matchMedia", {
 })
 
 // Mock ResizeObserver
-global.ResizeObserver = jest.fn().mockImplementation(() => ({
+globalThis.ResizeObserver = jest.fn().mockImplementation(() => ({
   observe: jest.fn(),
   unobserve: jest.fn(),
   disconnect: jest.fn(),
 }))
 
 // Mock IntersectionObserver
-global.IntersectionObserver = jest.fn().mockImplementation(() => ({
+globalThis.IntersectionObserver = jest.fn().mockImplementation(() => ({
   observe: jest.fn(),
   unobserve: jest.fn(),
   disconnect: jest.fn(),
 }))
 
 // Mock window.location
-delete window.location
-window.location = {
+delete globalThis.location
+globalThis.location = {
   href: "",
   assign: jest.fn(),
   replace: jest.fn(),

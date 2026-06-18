@@ -10,11 +10,57 @@ import { fetchHistoricalFlightData, decryptFlightData, searchFlightData } from "
 import { FlightStatusBadge } from "@/components/flight-status-badge"
 import { useAuth } from "@/components/auth-provider"
 
+const fetchAirportCodes = async (flightNumber: string, carrierCode: string) => {
+  try {
+    const flightInfoResult = await searchFlightData(flightNumber, carrierCode)
+    if (flightInfoResult?.flightInfo) {
+      return {
+        arrivalCode: flightInfoResult.flightInfo.arrivalAirport?.code || "",
+        departureCode: flightInfoResult.flightInfo.departureAirport?.code || "",
+      }
+    }
+  } catch (e) {
+    console.warn("Could not fetch flight info for airport codes", e)
+  }
+  return { arrivalCode: "", departureCode: "" }
+}
+
+const extractEncryptedFields = (flightDetails: any[]) => {
+  const encryptedFields: string[] = []
+  for (const flight of flightDetails) {
+    if (!flight.marketedFlightSegments) continue
+    for (const segment of flight.marketedFlightSegments) {
+      if (segment.marketingAirlineCode) {
+        encryptedFields.push(segment.marketingAirlineCode)
+      }
+      if (segment.flightNumber) {
+        encryptedFields.push(segment.flightNumber)
+      }
+    }
+  }
+  return encryptedFields
+}
+
+const applyDecryptedFields = (flightDetails: any[], decryptedData: any[]) => {
+  let decryptIndex = 0
+  for (const flight of flightDetails) {
+    if (!flight.marketedFlightSegments) continue
+    for (const segment of flight.marketedFlightSegments) {
+      if (segment.marketingAirlineCode && decryptedData[decryptIndex]) {
+        segment.marketingAirlineCode = decryptedData[decryptIndex++]
+      }
+      if (segment.flightNumber && decryptedData[decryptIndex]) {
+        segment.flightNumber = decryptedData[decryptIndex++]
+      }
+    }
+  }
+}
+
 interface FlightSearchProps {
   onFlightSelect: (flight: any) => void
 }
 
-export function FlightSearch({ onFlightSelect }: FlightSearchProps) {
+export function FlightSearch({ onFlightSelect }: Readonly<FlightSearchProps>) {
   const { walletAddress } = useAuth()
   const [flightNumber, setFlightNumber] = useState("")
   const [carrierCode, setCarrierCode] = useState("")
@@ -31,72 +77,36 @@ export function FlightSearch({ onFlightSelect }: FlightSearchProps) {
 
     setLoading(true)
     try {
-      let arrivalCode: string = "";
-      let departureCode: string = "";
-
-      try {
-        const flightInfoResult = await searchFlightData(flightNumber, carrierCode);
-        if (flightInfoResult?.flightInfo) {
-          arrivalCode = flightInfoResult?.flightInfo.arrivalAirport?.code;
-          departureCode = flightInfoResult?.flightInfo.departureAirport?.code;
-        }
-      } catch (e) {
-        console.warn("Could not fetch flight info for airport codes", e);
-      }
+      const { arrivalCode, departureCode } = await fetchAirportCodes(flightNumber, carrierCode)
 
       const data = await fetchHistoricalFlightData(flightNumber, carrierCode, fromDate, toDate, arrivalCode, departureCode, walletAddress || undefined)
 
-      if (!data || !data.flightDetails) {
-        setSearchResults([]);
-        return;
+      if (!data?.flightDetails) {
+        setSearchResults([])
+        return
       }
 
       // Decrypt encrypted data if present
-      const encryptedFields = []
-      if (data.flightDetails) {
-        for (const flight of data.flightDetails) {
-          if (flight.marketedFlightSegments) {
-            for (const segment of flight.marketedFlightSegments) {
-              if (segment.marketingAirlineCode) {
-                encryptedFields.push(segment.marketingAirlineCode)
-              }
-              if (segment.flightNumber) {
-                encryptedFields.push(segment.flightNumber)
-              }
-            }
-          }
-        }
-      }
+      const encryptedFields = extractEncryptedFields(data.flightDetails)
 
       if (encryptedFields.length > 0) {
         const response = await decryptFlightData(encryptedFields)
         const decryptedData = response.decryptedData || []
 
         // Apply decrypted data back to the results
-        let decryptIndex = 0
-        for (const flight of data.flightDetails) {
-          if (flight.marketedFlightSegments) {
-            for (const segment of flight.marketedFlightSegments) {
-              if (segment.marketingAirlineCode && decryptedData[decryptIndex]) {
-                segment.marketingAirlineCode = decryptedData[decryptIndex++]
-              }
-              if (segment.flightNumber && decryptedData[decryptIndex]) {
-                segment.flightNumber = decryptedData[decryptIndex++]
-              }
-            }
-          }
-        }
+        applyDecryptedFields(data.flightDetails, decryptedData)
       }
 
       // Sort results by latest date/time
       const sortedResults = [...data.flightDetails].sort((a, b) => {
-        const timeA = new Date(a.times?.scheduledDeparture || a.scheduledDepartureDate || a.departureDate).getTime();
-        const timeB = new Date(b.times?.scheduledDeparture || b.scheduledDepartureDate || b.departureDate).getTime();
-        return timeB - timeA;
-      });
+        const timeA = new Date(a.times?.scheduledDeparture || a.scheduledDepartureDate || a.departureDate).getTime()
+        const timeB = new Date(b.times?.scheduledDeparture || b.scheduledDepartureDate || b.departureDate).getTime()
+        return timeB - timeA
+      })
 
       setSearchResults(sortedResults)
     } catch (error) {
+      console.error("Error searching flights:", error)
     } finally {
       setLoading(false)
     }
@@ -145,7 +155,7 @@ export function FlightSearch({ onFlightSelect }: FlightSearchProps) {
           <h3 className="text-lg font-semibold">Search Results</h3>
           {searchResults.map((flight, index) => (
             <Card
-              key={index}
+              key={flight.id || `${flight.carrierCode}-${flight.flightNumber}-${flight.times?.scheduledDeparture || flight.departureDate || index}`}
               className="cursor-pointer hover:shadow-md transition-shadow"
               onClick={() => onFlightSelect(flight)}
             >

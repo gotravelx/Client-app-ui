@@ -10,7 +10,7 @@ interface SearchBarProps {
   loading: boolean
 }
 
-export function SearchBar({ onSearch, loading }: SearchBarProps) {
+export function SearchBar({ onSearch, loading }: Readonly<SearchBarProps>) {
   const [flightNumber, setFlightNumber] = useState("")
 
   const handleSubmit = (e: React.FormEvent) => {
