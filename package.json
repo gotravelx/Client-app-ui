@@ -44,9 +44,10 @@
     "cmdk": "^0.2.0",
     "embla-carousel-react": "^8.0.0",
     "input-otp": "^1.2.4",
+    "lodash": "^4.18.1",
     "lucide-react": "^0.263.1",
     "moment-timezone": "^0.5.43",
-    "next": "^14.0.0",
+    "next": "^14.2.23",
     "next-themes": "^0.2.1",
     "react": "^18.0.0",
     "react-day-picker": "^8.9.1",
@@ -59,6 +60,11 @@
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.7.0"
   },
+  "overrides": {
+    "js-yaml": "^4.2.0",
+    "postcss": "^8.5.10",
+    "glob": "^10.5.0"
+  },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.1.4",
     "@testing-library/react": "^14.0.0",
@@ -69,10 +75,10 @@
     "@types/react-dom": "^18.0.0",
     "autoprefixer": "^10.4.14",
     "eslint": "^8.0.0",
-    "eslint-config-next": "^14.0.0",
+    "eslint-config-next": "^14.2.23",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
-    "postcss": "^8.4.24",
+    "postcss": "^8.5.10",
     "tailwindcss": "^3.4.17",
     "ts-jest": "^29.1.1",
     "typescript": "^5.0.0"
