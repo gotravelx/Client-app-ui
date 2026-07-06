@@ -5,13 +5,13 @@ WORKDIR /app
 
 # Copy package files and install dependencies
 COPY package*.json ./
-RUN npm install --legacy-peer-deps
+RUN npm ci --legacy-peer-deps --ignore-scripts
 
 # Copy all project files
 COPY . .
 
 # Only run next build — output: export handles static output to /out
-RUN npx next build
+RUN npm run build
 
 # ---------------------------------------
 
@@ -21,7 +21,7 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Install static file server
-RUN npm install -g serve
+RUN npm install -g serve@14.2.4 --ignore-scripts
 
 # Copy the exported static app from builder
 COPY --from=builder /app/out ./out
