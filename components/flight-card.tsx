@@ -11,7 +11,46 @@ interface FlightTimelineCardProps {
   events?: any[]
 }
 
-export function FlightCard({ flight, events = [] }: Readonly<FlightTimelineCardProps>) {
+export function FlightCard({ flight: rawFlight, events = [] }: Readonly<FlightTimelineCardProps>) {
+  const depAirport = typeof rawFlight.departureAirport === 'string'
+    ? { code: rawFlight.departureAirport, city: rawFlight.departureCity }
+    : rawFlight.departureAirport || {}
+    
+  const arrAirport = typeof rawFlight.arrivalAirport === 'string'
+    ? { code: rawFlight.arrivalAirport, city: rawFlight.arrivalCity }
+    : rawFlight.arrivalAirport || {}
+
+  const depCity = typeof rawFlight.departureCity === 'string'
+    ? { city: rawFlight.departureCity }
+    : rawFlight.departureCity || {}
+
+  const arrCity = typeof rawFlight.arrivalCity === 'string'
+    ? { city: rawFlight.arrivalCity }
+    : rawFlight.arrivalCity || {}
+
+  const flight = {
+    ...rawFlight,
+    departureAirport: depAirport,
+    arrivalAirport: arrAirport,
+    departureCity: depCity,
+    arrivalCity: arrCity,
+    times: {
+      scheduledDeparture: rawFlight.times?.scheduledDeparture || rawFlight.utcTimes?.scheduledDeparture,
+      estimatedDeparture: rawFlight.times?.estimatedDeparture || rawFlight.utcTimes?.estimatedDeparture,
+      actualDeparture: rawFlight.times?.actualDeparture || rawFlight.utcTimes?.actualDeparture || rawFlight.times?.estimatedDeparture || rawFlight.utcTimes?.estimatedDeparture,
+      scheduledArrival: rawFlight.times?.scheduledArrival || rawFlight.utcTimes?.scheduledArrival,
+      estimatedArrival: rawFlight.times?.estimatedArrival || rawFlight.utcTimes?.estimatedArrival,
+      actualArrival: rawFlight.times?.actualArrival || rawFlight.utcTimes?.actualArrival || rawFlight.times?.estimatedArrival || rawFlight.utcTimes?.estimatedArrival,
+      outTime: rawFlight.times?.outTime || rawFlight.status?.outTime || rawFlight.status?.outUtc || rawFlight.times?.outUtc,
+      offTime: rawFlight.times?.offTime || rawFlight.status?.offTime || rawFlight.status?.offUtc || rawFlight.times?.offUtc,
+      onTime: rawFlight.times?.onTime || rawFlight.status?.onTime || rawFlight.status?.onUtc || rawFlight.times?.onUtc,
+      inTime: rawFlight.times?.inTime || rawFlight.status?.inTime || rawFlight.status?.inUtc || rawFlight.times?.inUtc,
+      outUtc: rawFlight.times?.outUtc || rawFlight.status?.outUtc || rawFlight.status?.outTime || rawFlight.times?.outTime,
+      offUtc: rawFlight.times?.offUtc || rawFlight.status?.offUtc || rawFlight.status?.offTime || rawFlight.times?.offTime,
+      onUtc: rawFlight.times?.onUtc || rawFlight.status?.onUtc || rawFlight.status?.onTime || rawFlight.times?.onTime,
+      inUtc: rawFlight.times?.inUtc || rawFlight.status?.inUtc || rawFlight.status?.inTime || rawFlight.times?.inTime,
+    }
+  }
   // Airport to timezone mapping for major US airports
   const getAirportTimezone = (airportCode: string): string => {
     const timezones: { [key: string]: string } = {
@@ -368,9 +407,11 @@ export function FlightCard({ flight, events = [] }: Readonly<FlightTimelineCardP
 
   const getFlightEventsTimeline = () => {
     const isCancelled = flight.status?.legStatus?.includes('CNCL') ||
-      flight?.status.legStatus?.includes('CNCL') ||
+      flight?.status?.legStatus?.includes('CNCL') ||
       flight.status?.legStatus === 'C' ||
-      flight?.status.legStatus === 'C'
+      flight?.status?.legStatus === 'C' ||
+      flight.status?.statusCode?.includes('CNCL') ||
+      flight.status?.statusCode === 'C'
 
     if (isCancelled) {
       return [getCancelEvent(flight, convertToLocalTime)]
@@ -549,7 +590,7 @@ export function FlightCard({ flight, events = [] }: Readonly<FlightTimelineCardP
                     </Badge>
                   )}
                 </CardTitle>
-                <FlightStatusBadge status={flight.status?.legStatus || flight.flightStatus} />
+                <FlightStatusBadge status={flight.status?.legStatus || flight.status?.statusCode || flight.flightStatus} />
               </div>
 
               <div className="flex items-center justify-between text-sm">
