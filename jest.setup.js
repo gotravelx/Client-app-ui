@@ -3,6 +3,8 @@
 import { jest } from "@jest/globals"
 import "@testing-library/jest-dom"
 
+jest.setTimeout(30000);
+
 // Mock next/router
 jest.mock("next/router", () => ({
   useRouter() {
@@ -105,8 +107,33 @@ globalThis.IntersectionObserver = jest.fn().mockImplementation(() => ({
 // Mock window.location
 delete globalThis.location
 globalThis.location = {
-  href: "",
+  href: "http://localhost",
   assign: jest.fn(),
   replace: jest.fn(),
   reload: jest.fn(),
 }
+
+// Mock next/image
+jest.mock("next/image", () => ({
+  __esModule: true,
+  default: (props) => {
+    const { src, alt, priority, ...rest } = props;
+    const React = require("react");
+    return React.createElement("img", {
+      ...rest,
+      src: typeof src === "object" ? src.src : src,
+      alt: alt || "mocked image",
+    });
+  },
+}));
+
+// Mock auth-provider
+jest.mock("@/components/auth-provider", () => ({
+  useAuth: () => ({
+    user: { email: "test@example.com" },
+    loading: false,
+    walletAddress: "0xabcd",
+    isConnected: true,
+  }),
+  AuthProvider: ({ children }) => children,
+}));
