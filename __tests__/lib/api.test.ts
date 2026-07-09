@@ -28,14 +28,14 @@ describe("API Functions", () => {
         json: async () => mockFlightData,
       } as Response)
 
-      const result = await fetchHistoricalFlightData("3682", "UA", "2024-01-01", "2024-01-02")
+      const result = await fetchHistoricalFlightData("3682", "UA", "2024-01-01", "2024-01-02", "LAX", "SFO")
 
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining("/v1/flights/fetch-historical/3682/date-range"),
         expect.objectContaining({
           method: "GET",
           headers: {
-            "Content-Type": "application/json",
+            "Accept": "application/json",
           },
         }),
       )
@@ -48,21 +48,24 @@ describe("API Functions", () => {
         json: async () => mockFlightData,
       } as Response)
 
-      await fetchHistoricalFlightData("3682", "UA", "2024-01-01", "2024-01-02")
+      await fetchHistoricalFlightData("3682", "UA", "2024-01-01", "2024-01-02", "LAX", "SFO")
 
       const calledUrl = mockFetch.mock.calls[0][0] as string
       expect(calledUrl).toContain("fromDate=2024-01-01")
       expect(calledUrl).toContain("toDate=2024-01-02")
       expect(calledUrl).toContain("carrierCode=UA")
+      expect(calledUrl).toContain("arrivalAirport=LAX")
+      expect(calledUrl).toContain("departureAirport=SFO")
     })
 
     it("throws error when API response is not ok", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 404,
+        json: async () => ({}),
       } as Response)
 
-      await expect(fetchHistoricalFlightData("3682", "UA", "2024-01-01", "2024-01-02")).rejects.toThrow(
+      await expect(fetchHistoricalFlightData("3682", "UA", "2024-01-01", "2024-01-02", "LAX", "SFO")).rejects.toThrow(
         "API error: 404",
       )
     })
@@ -70,7 +73,7 @@ describe("API Functions", () => {
     it("throws error when fetch fails", async () => {
       mockFetch.mockRejectedValueOnce(new Error("Network error"))
 
-      await expect(fetchHistoricalFlightData("3682", "UA", "2024-01-01", "2024-01-02")).rejects.toThrow("Network error")
+      await expect(fetchHistoricalFlightData("3682", "UA", "2024-01-01", "2024-01-02", "LAX", "SFO")).rejects.toThrow("Network error")
     })
   })
 
@@ -91,6 +94,7 @@ describe("API Functions", () => {
         expect.objectContaining({
           method: "POST",
           headers: {
+            "Accept": "application/json",
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ encryptedData }),
@@ -103,6 +107,7 @@ describe("API Functions", () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 400,
+        json: async () => ({}),
       } as Response)
 
       await expect(decryptFlightData(["encrypted1", "encrypted2"])).rejects.toThrow("Decryption API error: 400")

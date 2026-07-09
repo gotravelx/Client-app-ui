@@ -17,7 +17,7 @@ describe("useToast Hook - Full Coverage", () => {
       result.current.toast({ title: "Test Toast" })
     })
 
-    expect(result.current.toasts.length).toBe(1)
+    expect(result.current.toasts).toHaveLength(1)
     expect(result.current.toasts[0].title).toBe("Test Toast")
     expect(result.current.toasts[0].open).toBe(true)
   })
@@ -31,7 +31,7 @@ describe("useToast Hook - Full Coverage", () => {
     })
 
     // TOAST_LIMIT = 1
-    expect(result.current.toasts.length).toBe(1)
+    expect(result.current.toasts).toHaveLength(1)
     expect(result.current.toasts[0].title).toBe("Toast 2")
   })
 
@@ -139,6 +139,6 @@ describe("useToast Hook - Full Coverage", () => {
       result.current.toast({})
     })
 
-    expect(result.current.toasts.length).toBe(1)
+    expect(result.current.toasts).toHaveLength(1)
   })
 })

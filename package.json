@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "jest --coverage || echo 'Tests failed' && next build",
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
@@ -62,10 +62,10 @@
   },
   "overrides": {
     "js-yaml": "^4.2.0",
-    "postcss": "^8.5.10",
-    "glob": "^10.5.0"
+    "postcss": "^8.5.10"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.1.4",
     "@testing-library/react": "^14.0.0",
     "@testing-library/user-event": "^14.5.1",

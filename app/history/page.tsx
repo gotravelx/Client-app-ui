@@ -259,6 +259,7 @@ export default function HistoryPage() {
               size="icon"
               onClick={() => router.back()}
               className="rounded-full mt-1 -ml-12 hidden md:flex"
+              aria-label="Back"
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
@@ -267,6 +268,7 @@ export default function HistoryPage() {
               size="icon"
               onClick={() => router.back()}
               className="rounded-full md:hidden"
+              aria-label="Back"
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>

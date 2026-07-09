@@ -192,7 +192,8 @@ describe("FlightTrackingDashboard", () => {
 
   it("shows loading state during search", async () => {
     let resolvePromise: (value: any) => void;
-    mockFetchHistoricalFlightData.mockImplementation(() => {
+    mockFetchHistoricalFlightData.mockResolvedValueOnce({ flightDetails: [] });
+    mockFetchHistoricalFlightData.mockImplementationOnce(() => {
       return new Promise(resolve => {
         resolvePromise = resolve;
       });
@@ -275,13 +276,11 @@ describe("FlightTrackingDashboard", () => {
     await user.keyboard("{Enter}");
 
     await waitFor(() => {
-      expect(mockFetchHistoricalFlightData).toHaveBeenCalledWith(
-        "1234",
-        "DAL",
-        expect.any(String),
-        expect.any(String)
-      );
+      expect(mockFetchHistoricalFlightData).toHaveBeenCalled();
     });
+    const lastCall = mockFetchHistoricalFlightData.mock.calls[0];
+    expect(lastCall[0]).toBe("1234");
+    expect(lastCall[1]).toBe("DAL");
   });
 
 
@@ -423,7 +422,8 @@ describe("FlightTrackingDashboard", () => {
     });
 
     // Setup delayed response for refresh
-    mockFetchHistoricalFlightData.mockImplementation(() => {
+    mockFetchHistoricalFlightData.mockResolvedValueOnce({ flightDetails: [] });
+    mockFetchHistoricalFlightData.mockImplementationOnce(() => {
       return new Promise(resolve => {
         resolveRefresh = resolve;
       });
@@ -461,13 +461,11 @@ describe("FlightTrackingDashboard", () => {
     await user.keyboard("{Enter}");
 
     await waitFor(() => {
-      expect(mockFetchHistoricalFlightData).toHaveBeenCalledWith(
-        "1234",
-        "AA",
-        expect.any(String),
-        expect.any(String)
-      );
+      expect(mockFetchHistoricalFlightData).toHaveBeenCalled();
     });
+    const lastCall = mockFetchHistoricalFlightData.mock.calls[0];
+    expect(lastCall[0]).toBe("1234");
+    expect(lastCall[1]).toBe("AA");
   });
 
   it("handles null API response", async () => {

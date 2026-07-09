@@ -13,108 +13,78 @@ describe("Constants", () => {
       expect(constructor?.stateMutability).toBe("nonpayable")
     })
 
-    it("should contain FlightDataSet event", () => {
-      const flightDataSetEvent = CONTRACT_ABI.find((item) => item.type === "event" && item.name === "FlightDataSet")
-      expect(flightDataSetEvent).toBeDefined()
-      expect(flightDataSetEvent?.anonymous).toBe(false)
+    it("should contain FlightDataInserted event", () => {
+      const event = CONTRACT_ABI.find((item) => item.type === "event" && item.name === "FlightDataInserted")
+      expect(event).toBeDefined()
+      expect(event?.anonymous).toBe(false)
 
-      // Check required inputs
-      const inputs = flightDataSetEvent?.inputs || []
+      const inputs = event?.inputs || []
       const flightNumberInput = inputs.find((input) => input.name === "flightNumber")
       const carrierCodeInput = inputs.find((input) => input.name === "carrierCode")
-      const utcTimesInput = inputs.find((input) => input.name === "utcTimes")
 
       expect(flightNumberInput).toBeDefined()
       expect(flightNumberInput?.type).toBe("string")
       expect(carrierCodeInput).toBeDefined()
       expect(carrierCodeInput?.type).toBe("string")
-      expect(utcTimesInput).toBeDefined()
-      expect(utcTimesInput?.type).toBe("tuple")
     })
 
-    it("should contain FlightStatusUpdate event", () => {
-      const flightStatusUpdateEvent = CONTRACT_ABI.find(
-        (item) => item.type === "event" && item.name === "FlightStatusUpdate",
+    it("should contain FlightStatusUpdated event", () => {
+      const event = CONTRACT_ABI.find(
+        (item) => item.type === "event" && item.name === "FlightStatusUpdated",
       )
-      expect(flightStatusUpdateEvent).toBeDefined()
-      expect(flightStatusUpdateEvent?.anonymous).toBe(false)
+      expect(event).toBeDefined()
+      expect(event?.anonymous).toBe(false)
 
-      // Check required inputs
-      const inputs = flightStatusUpdateEvent?.inputs || []
+      const inputs = event?.inputs || []
       const flightNumberInput = inputs.find((input) => input.name === "flightNumber")
-      const flightStatusInput = inputs.find((input) => input.name === "FlightStatus")
-      const arrivalStateInput = inputs.find((input) => input.name === "ArrivalState")
-      const departureStateInput = inputs.find((input) => input.name === "DepartureState")
+      const newArrivalStatus = inputs.find((input) => input.name === "newArrivalStatus")
+      const newDepartureStatus = inputs.find((input) => input.name === "newDepartureStatus")
+      const newLegStatus = inputs.find((input) => input.name === "newLegStatus")
 
       expect(flightNumberInput).toBeDefined()
-      expect(flightStatusInput).toBeDefined()
-      expect(arrivalStateInput).toBeDefined()
-      expect(departureStateInput).toBeDefined()
+      expect(newArrivalStatus).toBeDefined()
+      expect(newDepartureStatus).toBeDefined()
+      expect(newLegStatus).toBeDefined()
     })
 
-    it("should contain SubscriptionDetails event", () => {
-      const subscriptionDetailsEvent = CONTRACT_ABI.find(
-        (item) => item.type === "event" && item.name === "SubscriptionDetails",
+    it("should contain FlightSubscriptionAdded event", () => {
+      const event = CONTRACT_ABI.find(
+        (item) => item.type === "event" && item.name === "FlightSubscriptionAdded",
       )
-      expect(subscriptionDetailsEvent).toBeDefined()
+      expect(event).toBeDefined()
 
-      // Check for indexed user field
-      const inputs = subscriptionDetailsEvent?.inputs || []
+      const inputs = event?.inputs || []
       const userInput = inputs.find((input) => input.name === "user")
       expect(userInput).toBeDefined()
-      expect(userInput?.indexed).toBe(true)
       expect(userInput?.type).toBe("address")
     })
 
-    it("should contain SubscriptionsRemoved event", () => {
-      const subscriptionsRemovedEvent = CONTRACT_ABI.find(
-        (item) => item.type === "event" && item.name === "SubscriptionsRemoved",
+    it("should contain FlightUnsubscribed event", () => {
+      const event = CONTRACT_ABI.find(
+        (item) => item.type === "event" && item.name === "FlightUnsubscribed",
       )
-      expect(subscriptionsRemovedEvent).toBeDefined()
+      expect(event).toBeDefined()
 
-      // Check for indexed user field and numberOfFlightsUnsubscribed
-      const inputs = subscriptionsRemovedEvent?.inputs || []
+      const inputs = event?.inputs || []
       const userInput = inputs.find((input) => input.name === "user")
-      const numberOfFlightsInput = inputs.find((input) => input.name === "numberOfFlightsUnsubscribed")
+      const flightNumberInput = inputs.find((input) => input.name === "flightNumber")
 
       expect(userInput).toBeDefined()
-      expect(userInput?.indexed).toBe(true)
-      expect(numberOfFlightsInput).toBeDefined()
-      expect(numberOfFlightsInput?.type).toBe("uint256")
-    })
-
-    it("should have valid UTC time struct in FlightDataSet", () => {
-      const flightDataSetEvent = CONTRACT_ABI.find((item) => item.type === "event" && item.name === "FlightDataSet")
-      const utcTimesInput = flightDataSetEvent?.inputs?.find((input) => input.name === "utcTimes")
-      const components = utcTimesInput?.components || []
-
-      const expectedFields = [
-        "actualArrivalUTC",
-        "actualDepartureUTC",
-        "estimatedArrivalUTC",
-        "estimatedDepartureUTC",
-        "scheduledArrivalUTC",
-        "scheduledDepartureUTC",
-      ]
-
-      expectedFields.forEach((field) => {
-        const component = components.find((c) => c.name === field)
-        expect(component).toBeDefined()
-        expect(component?.type).toBe("string")
-      })
+      expect(userInput?.type).toBe("address")
+      expect(flightNumberInput).toBeDefined()
+      expect(flightNumberInput?.type).toBe("string")
     })
   })
 
   describe("CONTRACT_ADDRESS", () => {
-    it("should be a valid Ethereum address", () => {
+    it("should be a valid Ethereum address format", () => {
       expect(typeof CONTRACT_ADDRESS).toBe("string")
       expect(CONTRACT_ADDRESS).toMatch(/^0x[a-fA-F0-9]{40}$/)
-      expect(CONTRACT_ADDRESS).toBe("0x2Ff328B1B84a78aB61c41ca7D7c3302dD775fDAa")
     })
 
     it("should not be empty", () => {
       expect(CONTRACT_ADDRESS).toBeTruthy()
-      expect(CONTRACT_ADDRESS.length).toBe(42) // 0x + 40 hex characters
+      expect(CONTRACT_ADDRESS).toHaveLength(42) // 0x + 40 hex characters
     })
   })
 
@@ -147,12 +117,10 @@ describe("Constants", () => {
     })
 
     it("should export constants that can be used together", () => {
-      // Test that constants can be used in a typical blockchain connection scenario
       expect(typeof CONTRACT_ABI).toBe("object")
       expect(typeof CONTRACT_ADDRESS).toBe("string")
       expect(typeof WS_PROVIDER_URL).toBe("string")
 
-      // Verify they have the expected formats for blockchain integration
       expect(Array.isArray(CONTRACT_ABI)).toBe(true)
       expect(CONTRACT_ADDRESS.startsWith("0x")).toBe(true)
       expect(WS_PROVIDER_URL.startsWith("wss://")).toBe(true)

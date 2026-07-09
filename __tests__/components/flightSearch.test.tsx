@@ -51,7 +51,15 @@ describe("FlightSearch Component", () => {
     await userEvent.click(screen.getByRole("button", { name: /Search Flights/i }))
 
     await waitFor(() => {
-      expect(fetchHistoricalFlightData).toHaveBeenCalledWith("3682", "UA", "2025-09-10", "2025-09-11")
+      expect(fetchHistoricalFlightData).toHaveBeenCalledWith(
+        "3682",
+        "UA",
+        "2025-09-10",
+        "2025-09-11",
+        expect.any(String),
+        expect.any(String),
+        "0xabcd"
+      )
     })
   })
 

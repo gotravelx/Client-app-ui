@@ -18,11 +18,7 @@ const mockWebSocket = {
 const MockWebSocket = jest.fn(() => mockWebSocket);
 global.WebSocket = MockWebSocket as any;
 
-// Mock constants
-jest.mock("@/lib/constants", () => ({
-  CONTRACT_ADDRESS: "0x2Ff328B1B84a78aB61c41ca7D7c3302dD775fDAa",
-  WS_PROVIDER_URL: "wss://columbus.camino.network/ext/bc/C/ws",
-}));
+import { CONTRACT_ADDRESS } from "@/lib/constants";
 
 describe("useBlockchainConnection - Advanced Tests", () => {
   let originalDateNow: any;
@@ -189,7 +185,7 @@ describe("useBlockchainConnection - Advanced Tests", () => {
         params: [
           "logs",
           {
-            address: "0x2Ff328B1B84a78aB61c41ca7D7c3302dD775fDAa",
+            address: CONTRACT_ADDRESS,
             topics: [],
           },
         ],
