@@ -254,8 +254,8 @@ export default function ProfilePage() {
 
     if (walletAddress && walletType) {
       const addr = walletAddress.toLowerCase()
-      const existing = list.find((w) => w.address.toLowerCase() === addr)
-      if (!existing) {
+      const exists = list.some((w) => w.address.toLowerCase() === addr)
+      if (!exists) {
         list = [...list, { address: walletAddress, type: walletType }]
         localStorage.setItem("connectedWallets", JSON.stringify(list))
       }

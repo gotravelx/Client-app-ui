@@ -32,48 +32,20 @@ describe("useIsMobile", () => {
     window.matchMedia = originalMatchMedia
   })
 
-  it("returns true for mobile screen sizes", () => {
+  it.each([
+    { width: 500, expected: true, description: "returns true for mobile screen sizes" },
+    { width: 1024, expected: false, description: "returns false for desktop screen sizes" },
+    { width: 768, expected: false, description: "returns false for exactly 768px" },
+    { width: 767, expected: true, description: "returns true for 767px (just below breakpoint)" },
+  ])("$description", ({ width, expected }) => {
     Object.defineProperty(window, "innerWidth", {
       writable: true,
       configurable: true,
-      value: 500, // Less than 768px
+      value: width,
     })
 
     const { result } = renderHook(() => useIsMobile())
-    expect(result.current).toBe(true)
-  })
-
-  it("returns false for desktop screen sizes", () => {
-    Object.defineProperty(window, "innerWidth", {
-      writable: true,
-      configurable: true,
-      value: 1024, // Greater than 768px
-    })
-
-    const { result } = renderHook(() => useIsMobile())
-    expect(result.current).toBe(false)
-  })
-
-  it("returns false for exactly 768px", () => {
-    Object.defineProperty(window, "innerWidth", {
-      writable: true,
-      configurable: true,
-      value: 768,
-    })
-
-    const { result } = renderHook(() => useIsMobile())
-    expect(result.current).toBe(false)
-  })
-
-  it("returns true for 767px (just below breakpoint)", () => {
-    Object.defineProperty(window, "innerWidth", {
-      writable: true,
-      configurable: true,
-      value: 767,
-    })
-
-    const { result } = renderHook(() => useIsMobile())
-    expect(result.current).toBe(true)
+    expect(result.current).toBe(expected)
   })
 
   it("handles common mobile device widths correctly", () => {

@@ -84,7 +84,7 @@ describe("Constants", () => {
 
     it("should not be empty", () => {
       expect(CONTRACT_ADDRESS).toBeTruthy()
-      expect(CONTRACT_ADDRESS.length).toBe(42) // 0x + 40 hex characters
+      expect(CONTRACT_ADDRESS).toHaveLength(42) // 0x + 40 hex characters
     })
   })
 

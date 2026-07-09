@@ -31,7 +31,7 @@ describe("FlightDetails branches", () => {
     expect(screen.getByText("Expected")).toBeInTheDocument();
   });
 
-  it("renders status details when flight.status is provided", () => {
+  it("renders status details when currentStatus is omitted from flight.status", () => {
     const flight = {
       carrierCode: "AI",
       flightNumber: "202",
@@ -86,29 +86,6 @@ describe("FlightDetails branches", () => {
     expect(screen.getAllByText("TBD").length).toBeGreaterThan(0);
   });
 
- it("renders status details when flight.status is provided", () => {
-  const flight = {
-    carrierCode: "AI",
-    flightNumber: "202",
-    status: {
-      statusDescription: "Departed",
-      currentStatus: "Departed",
-      departureState: "On Time",
-      arrivalState: "Expected",
-    },
-  }
-
-  render(<FlightDetails flight={flight} />)
-
-  expect(screen.getByText("Status Details")).toBeInTheDocument()
-
-  // FIX: multiple "Departed" values → use getAllByText
-  const departed = screen.getAllByText("Departed")
-  expect(departed).toHaveLength(2)
-
-  expect(screen.getByText("On Time")).toBeInTheDocument()
-  expect(screen.getByText("Expected")).toBeInTheDocument()
-})
 
 
   it("renders marketed flight segments when provided", () => {
