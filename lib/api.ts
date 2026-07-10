@@ -5,7 +5,7 @@ const getHeaders = (method: string): HeadersInit => {
     "Accept": "application/json",
   };
 
-  // Content-Type is only needed for requests with a body (POST, PUT, etc.)
+  // Content-Type is only needed for requests with a body (POST, PUT ,etc)
   // Removing it for GET makes it a "simple request", avoiding CORS preflight (OPTIONS)
   if (method !== "GET" && method !== "HEAD") {
     headers["Content-Type"] = "application/json";
