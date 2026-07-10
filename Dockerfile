@@ -24,10 +24,13 @@ WORKDIR /app
 RUN npm install -g serve@14.2.4 --ignore-scripts
 
 # Copy the exported static app from builder
-COPY --from=builder /app/out ./out
+COPY --from=builder --chown=node:node /app/out ./out
 
 # Expose Next.js static port
 EXPOSE 3000
+
+# Switch to non-root user
+USER node
 
 # Start the static server
 CMD ["serve", "-s", "out", "-l", "3000"]
